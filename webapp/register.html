@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация - ЦВЕТИ</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #FFF8F9 0%, #FCE4EC 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo img {
+            max-width: 200px;
+            height: auto;
+        }
+        
+        h1 {
+            color: #E8A8B4;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #8E8E93;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .success {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            color: #155724;
+            padding: 24px;
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 30px;
+            border: 2px solid #c3e6cb;
+        }
+        
+        .success strong {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .success p {
+            margin-top: 10px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        .info {
+            background: #f8f9fa;
+            padding: 24px;
+            border-radius: 16px;
+            font-size: 15px;
+            color: #495057;
+            line-height: 1.6;
+        }
+        
+        .info strong {
+            color: #E8A8B4;
+            display: block;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .info ol {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .info li {
+            margin-bottom: 12px;
+        }
+        
+        .info code {
+            background: #E8A8B4;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        
+        .bot-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: #E8A8B4;
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .bot-link:hover {
+            background: #D48A97;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(232, 168, 180, 0.4);
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 24px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .success, .info {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="/webapp/cveti.png" alt="ЦВЕТИ" onerror="this.style.display='none'">
+        </div>
+        
+        <h1>✨ Добро пожаловать в ЦВЕТИ!</h1>
+        <p class="subtitle">Студия красоты</p>
+        
+        <div class="success">
+            <strong>🎉 Интеграция успешно подключена!</strong>
+            <p>Теперь вы можете использовать систему лояльности через Telegram бота.</p>
+        </div>
+        
+        <div class="info">
+            <strong>📱 Что дальше?</strong>
+            <ol>
+                <li>Найдите нашего бота в Telegram: <strong>@cveti_cosmetology_bot</strong></li>
+                <li>Отправьте команду <code>/start</code></li>
+                <li>Поделитесь номером телефона для регистрации</li>
+                <li>Начните получать баллы за каждую покупку!</li>
+            </ol>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="https://t.me/cveti_cosmetology_bot" class="bot-link" target="_blank">
+                    Открыть бота в Telegram →
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
