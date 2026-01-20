@@ -137,7 +137,7 @@ async def delete_master(id: int, _: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/masters/{id}/move")
-async def move_master(id: int, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
+async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает мастера вверх или вниз по порядку"""
     try:
         # Получаем текущий элемент
@@ -259,7 +259,7 @@ async def delete_service(id: int, _: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/services/{id}/move")
-async def move_service(id: int, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
+async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает услугу вверх или вниз по порядку"""
     try:
         current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
@@ -376,7 +376,7 @@ async def delete_promotion(id: int, _: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/promotions/{id}/move")
-async def move_promotion(id: int, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
+async def move_promotion(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает акцию вверх или вниз по порядку"""
     try:
         current_res = await supabase.table("promotions").select("*").eq("id", id).single().execute()

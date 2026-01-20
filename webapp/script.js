@@ -913,16 +913,6 @@ function openAdminModal(id = null) {
     const deleteBtn = document.getElementById('delete-btn');
     const formId = document.getElementById('form-id');
     
-    // Скрываем кнопку добавить на вкладке настроек
-    const addBtn = document.querySelector('.fixed.bottom-24.left-1\/2');
-    if (addBtn) {
-        if (currentAdminTab === 'settings') {
-            addBtn.classList.add('hidden');
-        } else {
-            addBtn.classList.remove('hidden');
-        }
-    }
-    
     // Для рассылок не поддерживаем редактирование, только создание
     if (currentAdminTab === 'broadcasts' && id) {
         alert('Редактирование рассылок не поддерживается. Создайте новую рассылку.');
