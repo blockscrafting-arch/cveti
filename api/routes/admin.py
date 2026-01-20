@@ -119,7 +119,7 @@ async def create_master(data: Dict[str, Any], _: int = Depends(get_current_admin
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.put("/masters/{id}")
-async def update_master(id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("masters").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
@@ -128,7 +128,7 @@ async def update_master(id: int, data: Dict[str, Any], _: int = Depends(get_curr
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/masters/{id}")
-async def delete_master(id: int, _: int = Depends(get_current_admin)):
+async def delete_master(id: str, _: int = Depends(get_current_admin)):
     try:
         await supabase.table("masters").delete().eq("id", id).execute()
         return {"status": "ok"}
@@ -241,7 +241,7 @@ async def create_service(data: Dict[str, Any], _: int = Depends(get_current_admi
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.put("/services/{id}")
-async def update_service(id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("services").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
@@ -250,7 +250,7 @@ async def update_service(id: int, data: Dict[str, Any], _: int = Depends(get_cur
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/services/{id}")
-async def delete_service(id: int, _: int = Depends(get_current_admin)):
+async def delete_service(id: str, _: int = Depends(get_current_admin)):
     try:
         await supabase.table("services").delete().eq("id", id).execute()
         return {"status": "ok"}
@@ -358,7 +358,7 @@ async def create_promotion(data: Dict[str, Any], _: int = Depends(get_current_ad
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.put("/promotions/{id}")
-async def update_promotion(id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("promotions").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
@@ -367,7 +367,7 @@ async def update_promotion(id: int, data: Dict[str, Any], _: int = Depends(get_c
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/promotions/{id}")
-async def delete_promotion(id: int, _: int = Depends(get_current_admin)):
+async def delete_promotion(id: str, _: int = Depends(get_current_admin)):
     try:
         await supabase.table("promotions").delete().eq("id", id).execute()
         return {"status": "ok"}
@@ -460,7 +460,7 @@ async def get_users(_: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/users/{id}")
-async def get_user(id: int, _: int = Depends(get_current_admin)):
+async def get_user(id: str, _: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("users").select("*").eq("id", id).single().execute()
         return res.data if res.data else {}
@@ -469,7 +469,7 @@ async def get_user(id: int, _: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.put("/users/{id}")
-async def update_user(id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
         # Удаляем updated_at из данных, если он там есть - БД обновит автоматически через триггер или DEFAULT
         data.pop("updated_at", None)
@@ -482,7 +482,7 @@ async def update_user(id: int, data: Dict[str, Any], _: int = Depends(get_curren
 # --- Transactions ---
 
 @router.get("/users/{user_id}/transactions")
-async def get_user_transactions(user_id: int, _: int = Depends(get_current_admin)):
+async def get_user_transactions(user_id: str, _: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("loyalty_transactions")\
             .select("*")\
@@ -496,7 +496,7 @@ async def get_user_transactions(user_id: int, _: int = Depends(get_current_admin
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/users/{user_id}/transactions")
-async def create_transaction(user_id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     """Создает транзакцию и обновляет баланс пользователя"""
     try:
         # Получаем текущий баланс пользователя
