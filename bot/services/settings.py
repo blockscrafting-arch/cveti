@@ -99,12 +99,16 @@ async def update_setting(key: str, value: Any, setting_type: str = "string") -> 
         return False
 
 
-async def get_all_settings() -> Dict[str, Any]:
+async def get_all_settings(full_info: bool = True) -> Dict[str, Any]:
     """
     Получает все настройки из базы данных
     
+    Args:
+        full_info: Если True, возвращает dict с value, type, description.
+                   Если False, возвращает только value (для совместимости).
+    
     Returns:
-        Словарь {ключ: значение} со всеми настройками
+        Словарь настроек
     """
     try:
         result = await supabase.table("app_settings").select("*").execute()
@@ -115,7 +119,16 @@ async def get_all_settings() -> Dict[str, Any]:
                 key = setting["key"]
                 value = setting["value"]
                 setting_type = setting.get("type", "string")
-                settings_dict[key] = _convert_value(value, setting_type)
+                converted_value = _convert_value(value, setting_type)
+                
+                if full_info:
+                    settings_dict[key] = {
+                        "value": converted_value,
+                        "type": setting_type,
+                        "description": setting.get("description", "")
+                    }
+                else:
+                    settings_dict[key] = converted_value
         
         return settings_dict
         
