@@ -736,7 +736,7 @@ function renderAdminList() {
     
     if (currentAdminTab === 'users') {
         listEl.innerHTML = adminItems.map(item => `
-            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform" onclick="openUserModal(${item.id})">
+            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform" onclick="openUserModal('${item.id}')">
                 <div class="flex items-center gap-4 mb-3">
                     <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                         👤
@@ -821,16 +821,16 @@ function renderAdminList() {
                         </div>
                     </div>
                     <div class="flex gap-2 mt-3">
-                        <button onclick="viewBroadcast(${item.id})" class="px-4 bg-stone-100 text-stone-700 py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                        <button onclick="viewBroadcast('${item.id}')" class="px-4 bg-stone-100 text-stone-700 py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
                             Просмотр
                         </button>
                         ${item.status === 'pending' || item.status === 'failed' || item.status === 'scheduled' ? `
                             ${item.status === 'scheduled' ? '' : `
-                                <button onclick="sendBroadcast(${item.id})" class="flex-1 bg-stone-800 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                                <button onclick="sendBroadcast('${item.id}')" class="flex-1 bg-stone-800 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
                                     ${item.status === 'failed' ? 'Повторить отправку' : 'Отправить'}
                                 </button>
                             `}
-                            <button onclick="deleteBroadcast(${item.id})" class="px-4 bg-rose-500 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                            <button onclick="deleteBroadcast('${item.id}')" class="px-4 bg-rose-500 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
                                 Удалить
                             </button>
                         ` : ''}
@@ -841,7 +841,7 @@ function renderAdminList() {
     } else if (currentAdminTab === 'bot-buttons') {
         listEl.innerHTML = adminItems.map((item, index) => `
             <div class="bg-white p-4 rounded-[28px] border border-white/50 shadow-card flex items-center gap-3">
-                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal(${item.id})">
+                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${item.id}')">
                     <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                         🔘
                     </div>
@@ -875,18 +875,18 @@ function renderAdminList() {
         listEl.innerHTML = adminItems.map((item, index) => `
             <div class="bg-white p-4 rounded-[28px] border border-white/50 shadow-card flex items-center gap-3">
                 <div class="flex flex-col gap-1">
-                    <button onclick="event.stopPropagation(); moveItem(${item.id}, 'up')" 
+                    <button onclick="event.stopPropagation(); moveItem('${item.id}', 'up')" 
                             class="w-8 h-8 rounded-lg bg-stone-50 text-stone-600 flex items-center justify-center text-xs font-bold active:bg-stone-100 transition-colors shadow-sm ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}"
                             ${index === 0 ? 'disabled' : ''}>
                         ↑
                     </button>
-                    <button onclick="event.stopPropagation(); moveItem(${item.id}, 'down')" 
+                    <button onclick="event.stopPropagation(); moveItem('${item.id}', 'down')" 
                             class="w-8 h-8 rounded-lg bg-stone-50 text-stone-600 flex items-center justify-center text-xs font-bold active:bg-stone-100 transition-colors shadow-sm ${index === adminItems.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}"
                             ${index === adminItems.length - 1 ? 'disabled' : ''}>
                         ↓
                     </button>
                 </div>
-                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal(${item.id})">
+                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${item.id}')">
                     ${item.photo_url || item.image_url ? 
                         `<img src="${item.photo_url || item.image_url}" class="w-12 h-12 rounded-xl object-cover bg-stone-100 shadow-sm">` : 
                         `<div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
