@@ -696,9 +696,14 @@ async function loadAdminData() {
             adminItems = await apiFetch(`/api/admin/bot-buttons`);
         } else if (currentAdminTab === 'settings') {
             const data = await apiFetch(`/api/settings`);
-            adminItems = Object.entries(data.settings).map(([key, value]) => ({
-                key,
-                ...value
+            // Сервер теперь возвращает полные объекты { value, type, description }
+            // Мы просто мапим их в удобный формат
+            adminItems = Object.entries(data.settings).map(([key, setting]) => ({
+                id: key, // Используем ключ как ID
+                key: key,
+                value: setting.value,
+                type: setting.type,
+                description: setting.description
             }));
         } else {
             adminItems = await apiFetch(`/api/admin/${currentAdminTab}`);
@@ -1124,7 +1129,34 @@ function renderFormFields(item = {}) {
     const fieldsEl = document.getElementById('form-fields');
     let html = '';
     
-    if (currentAdminTab === 'masters') {
+    if (currentAdminTab === 'users') {
+        html = `
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Имя</label>
+                <input type="text" name="name" value="${item.name || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Телефон</label>
+                <input type="text" name="phone" value="${item.phone || ''}" placeholder="79991234567" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Баланс баллов</label>
+                <input type="number" name="balance" value="${item.balance || 0}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Уровень</label>
+                <select name="level" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                    <option value="new" ${item.level === 'new' ? 'selected' : ''}>New</option>
+                    <option value="regular" ${item.level === 'regular' ? 'selected' : ''}>Regular</option>
+                    <option value="vip" ${item.level === 'vip' ? 'selected' : ''}>VIP</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2 px-1">
+                <input type="checkbox" name="active" ${item.active !== false ? 'checked' : ''} class="w-4 h-4 rounded">
+                <label class="text-sm font-semibold text-stone-600">Активен</label>
+            </div>
+        `;
+    } else if (currentAdminTab === 'masters') {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Имя мастера</label>
