@@ -16,6 +16,27 @@ logger = logging.getLogger(__name__)
 LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
 log_path = LOG_PATH
 
+def _coerce_order(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+async def _normalize_orders(table_name: str, items: List[Dict[str, Any]]):
+    if not items:
+        return
+    def _sort_key(item: Dict[str, Any]):
+        order_val = _coerce_order(item.get("order"))
+        if order_val is None:
+            order_val = 10**12
+        return (order_val, str(item.get("id")))
+    sorted_items = sorted(items, key=_sort_key)
+    for idx, item in enumerate(sorted_items):
+        item_id = item.get("id")
+        if not item_id:
+            continue
+        await supabase.table(table_name).update({"order": idx}).eq("id", item_id).execute()
+
 # Глобальный Bot экземпляр для рассылок
 _broadcast_bot: Bot = None
 
@@ -161,7 +182,8 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         
         # Получаем все записи для поиска соседа
         all_res = await supabase.table("masters").select("*").execute()
-        valid_items = [item for item in all_res.data if item.get("order") is not None]
+        all_items = all_res.data or []
+        valid_items = [item for item in all_items if item.get("order") is not None]
         # #region agent log
         try:
             payload = {
@@ -189,6 +211,16 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             pass
         # #endregion
         
+        orders = [_coerce_order(item.get("order")) for item in all_items]
+        unique_orders = len(set([o for o in orders if o is not None]))
+        if len(all_items) > 1 and unique_orders <= 1:
+            await _normalize_orders("masters", all_items)
+            current_res = await supabase.table("masters").select("*").eq("id", id).single().execute()
+            current_order = current_res.data.get("order") if current_res.data else None
+            all_res = await supabase.table("masters").select("*").execute()
+            all_items = all_res.data or []
+            valid_items = [item for item in all_items if item.get("order") is not None]
+
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже в списке = увеличить свой order = найти соседа с БОЛЬШИМ order
@@ -366,7 +398,8 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         
         # Получаем все записи для поиска соседа
         all_res = await supabase.table("services").select("*").execute()
-        valid_items = [item for item in all_res.data if item.get("order") is not None]
+        all_items = all_res.data or []
+        valid_items = [item for item in all_items if item.get("order") is not None]
         # #region agent log
         try:
             payload = {
@@ -394,6 +427,16 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             pass
         # #endregion
         
+        orders = [_coerce_order(item.get("order")) for item in all_items]
+        unique_orders = len(set([o for o in orders if o is not None]))
+        if len(all_items) > 1 and unique_orders <= 1:
+            await _normalize_orders("services", all_items)
+            current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
+            current_order = current_res.data.get("order") if current_res.data else None
+            all_res = await supabase.table("services").select("*").execute()
+            all_items = all_res.data or []
+            valid_items = [item for item in all_items if item.get("order") is not None]
+
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
         candidates = []
