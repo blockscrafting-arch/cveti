@@ -5,9 +5,11 @@
 from bot.services.supabase_client import supabase
 from typing import Optional, Dict, Any
 import logging
+import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+LOG_PATH = r"d:\\vladexecute\\proj\\CVETI\\.cursor\\debug.log"
 
 # Кэш настроек (обновляется каждые 5 минут)
 _settings_cache: Dict[str, Any] = {}
@@ -64,7 +66,7 @@ async def get_setting(key: str, default_value: Optional[Any] = None, use_cache: 
         return default_value
 
 
-async def update_setting(key: str, value: Any, setting_type: str = "string") -> bool:
+async def update_setting(key: str, value: Any, setting_type: str = "string", updated_by: Optional[int] = None) -> bool:
     """
     Обновляет или создает настройку
     
@@ -77,15 +79,76 @@ async def update_setting(key: str, value: Any, setting_type: str = "string") -> 
         True если успешно, False при ошибке
     """
     try:
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run4",
+                "hypothesisId": "B2",
+                "location": "settings.py:79",
+                "message": "Update setting entry",
+                "data": {
+                    "key": key,
+                    "setting_type": setting_type,
+                    "value_type": type(value).__name__,
+                    "has_updated_by": bool(updated_by)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         # Преобразуем значение в строку для хранения
         value_str = str(value)
         
         # Используем RPC функцию для обновления
-        result = await supabase.rpc("update_setting", {
-            "p_key": key,
-            "p_value": value_str,
-            "p_type": setting_type
-        }).execute()
+        rpc_variant = "p_type"
+        try:
+            result = await supabase.rpc("update_setting", {
+                "p_key": key,
+                "p_value": value_str,
+                "p_type": setting_type
+            }).execute()
+        except Exception as e:
+            error_str = str(e)
+            if "update_setting" in error_str and ("p_key, p_type, p_value" in error_str or "schema cache" in error_str or "PGRST202" in error_str):
+                rpc_variant = "p_updated_by"
+                updated_by_value = updated_by if updated_by is not None else 0
+                result = await supabase.rpc("update_setting", {
+                    "p_key": key,
+                    "p_value": value_str,
+                    "p_updated_by": updated_by_value
+                }).execute()
+            else:
+                raise
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run4",
+                "hypothesisId": "B2",
+                "location": "settings.py:110",
+                "message": "Update setting rpc variant",
+                "data": {"rpc_variant": rpc_variant},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         
         # Очищаем кэш для этой настройки
         if key in _settings_cache:

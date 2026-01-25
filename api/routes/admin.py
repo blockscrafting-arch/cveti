@@ -7,10 +7,13 @@ from bot.config import settings
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
 import logging
+import json
+import re
 from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
 def _coerce_order(value):
     try:
         return int(value)
@@ -962,22 +965,94 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
         if image_url is not None:
             broadcast_data["image_url"] = image_url
         
+        # #region agent log
         try:
-            res = await supabase.table("broadcasts").insert(broadcast_data).execute()
-            # НЕ запускаем отправку автоматически - пользователь должен нажать "Отправить" или дождаться scheduled_at
-            return res.data[0] if res.data else {}
-        except Exception as insert_error:
-            # Если ошибка связана с отсутствием колонки image_url, пробуем без неё
-            error_str = str(insert_error)
-            if "image_url" in error_str and ("PGRST204" in error_str or "column" in error_str.lower()):
-                # Удаляем image_url и пробуем снова
-                broadcast_data_without_image = {k: v for k, v in broadcast_data.items() if k != "image_url"}
-                res = await supabase.table("broadcasts").insert(broadcast_data_without_image).execute()
-                logger.warning(f"Created broadcast without image_url (column missing in DB). Please run migration 007_enhance_broadcasts.sql")
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run4",
+                "hypothesisId": "B1",
+                "location": "admin.py:965",
+                "message": "Broadcast insert start",
+                "data": {
+                    "keys": sorted(list(broadcast_data.keys())),
+                    "has_image": "image_url" in broadcast_data
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
+
+        def _extract_missing_column(error_str: str) -> Optional[str]:
+            match = re.search(r"Could not find the '([^']+)' column", error_str)
+            return match.group(1) if match else None
+
+        pending_data = dict(broadcast_data)
+        last_error = None
+        for _ in range(6):
+            try:
+                res = await supabase.table("broadcasts").insert(pending_data).execute()
+                # НЕ запускаем отправку автоматически - пользователь должен нажать "Отправить" или дождаться scheduled_at
+                # #region agent log
+                try:
+                    payload = {
+                        "sessionId": "debug-session",
+                        "runId": "run4",
+                        "hypothesisId": "B1",
+                        "location": "admin.py:998",
+                        "message": "Broadcast insert success",
+                        "data": {"keys": sorted(list(pending_data.keys()))},
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    try:
+                        with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                            json.dump(payload, f, ensure_ascii=False)
+                            f.write('\n')
+                    except Exception:
+                        pass
+                    print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+                except Exception:
+                    pass
+                # #endregion
                 return res.data[0] if res.data else {}
-            else:
-                # Другая ошибка - пробрасываем дальше
+            except Exception as insert_error:
+                last_error = insert_error
+                error_str = str(insert_error)
+                missing_col = _extract_missing_column(error_str)
+                if missing_col and missing_col in pending_data:
+                    pending_data.pop(missing_col, None)
+                    # #region agent log
+                    try:
+                        payload = {
+                            "sessionId": "debug-session",
+                            "runId": "run4",
+                            "hypothesisId": "B1",
+                            "location": "admin.py:1016",
+                            "message": "Broadcast missing column removed",
+                            "data": {"missing_col": missing_col, "keys": sorted(list(pending_data.keys()))},
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        try:
+                            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                                json.dump(payload, f, ensure_ascii=False)
+                                f.write('\n')
+                        except Exception:
+                            pass
+                        print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+                    except Exception:
+                        pass
+                    # #endregion
+                    continue
                 raise
+        if last_error:
+            raise last_error
     except Exception as e:
         logger.error(f"Error in create_broadcast: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

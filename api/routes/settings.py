@@ -56,7 +56,7 @@ async def get_settings(
 async def update_setting_by_key(
     key: str,
     setting_update: SettingUpdate,
-    _: int = Depends(get_current_admin)
+    admin_id: int = Depends(get_current_admin)
 ) -> Dict[str, Any]:
     """
     Обновляет настройку по ключу (только для админов)
@@ -83,7 +83,7 @@ async def update_setting_by_key(
             if value < 0:
                 raise HTTPException(status_code=400, detail="Значение не может быть отрицательным")
         
-        success = await update_setting(key, value, setting_type)
+        success = await update_setting(key, value, setting_type, updated_by=admin_id)
         if not success:
             raise HTTPException(status_code=500, detail="Ошибка при обновлении настройки")
         
