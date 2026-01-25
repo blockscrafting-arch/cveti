@@ -1404,6 +1404,56 @@ async def update_bot_button(id: int, data: Dict[str, Any], _: int = Depends(get_
         logger.error(f"Error in update_bot_button: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
+@router.post("/bot-buttons/reorder")
+async def reorder_bot_buttons(payload: Dict[str, Any], _: int = Depends(get_current_admin)):
+    """Сохраняет порядок кнопок по строкам"""
+    try:
+        items = payload.get("items") if isinstance(payload, dict) else None
+        if not isinstance(items, list) or not items:
+            raise HTTPException(status_code=400, detail="Items list is required")
+
+        grouped: Dict[int, list] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            button_id = item.get("id")
+            row_number = item.get("row_number")
+            order_in_row = item.get("order_in_row")
+            if button_id is None or row_number is None or order_in_row is None:
+                continue
+            try:
+                row_number = int(row_number)
+                order_in_row = int(order_in_row)
+            except (TypeError, ValueError):
+                continue
+            grouped.setdefault(row_number, []).append((order_in_row, button_id))
+
+        if not grouped:
+            raise HTTPException(status_code=400, detail="No valid items to reorder")
+
+        normalized = []
+        for row_number, row_items in grouped.items():
+            row_items.sort(key=lambda x: x[0])
+            for index, (_, button_id) in enumerate(row_items):
+                normalized.append({
+                    "id": button_id,
+                    "row_number": row_number,
+                    "order_in_row": index
+                })
+
+        for item in normalized:
+            await supabase.table("bot_buttons").update({
+                "row_number": item["row_number"],
+                "order_in_row": item["order_in_row"]
+            }).eq("id", item["id"]).execute()
+
+        return {"status": "ok", "updated": len(normalized)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in reorder_bot_buttons: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 @router.delete("/bot-buttons/{id}")
 async def delete_bot_button(id: int, _: int = Depends(get_current_admin)):
     """Удаляет кнопку"""

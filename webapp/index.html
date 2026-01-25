@@ -412,8 +412,46 @@
                         <div class="h-20 skeleton w-full"></div>
                     </div>
 
+                    <!-- Bot Buttons Panel -->
+                    <div id="bot-buttons-panel" class="hidden mb-24">
+                        <div class="grid gap-4">
+                            <div class="bg-white rounded-[28px] p-4 shadow-card border border-white/50">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h3 class="font-semibold text-stone-800">Раскладка кнопок</h3>
+                                        <p class="text-xs text-stone-400 mt-1">Перетаскивайте кнопки между строками</p>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button id="bot-buttons-add-row" type="button" class="px-3 py-2 rounded-xl bg-stone-100 text-stone-700 text-xs font-semibold active:scale-[0.98] transition-all">+ Ряд</button>
+                                        <button id="bot-buttons-add-button" type="button" class="px-3 py-2 rounded-xl bg-stone-800 text-white text-xs font-semibold active:scale-[0.98] transition-all">+ Кнопка</button>
+                                    </div>
+                                </div>
+                                <div id="bot-buttons-rows" class="space-y-3"></div>
+                                <div id="bot-buttons-empty" class="hidden text-center text-stone-400 py-6 text-sm">Пока нет кнопок</div>
+                                <div class="mt-4 flex justify-end">
+                                    <button id="bot-buttons-save-order" type="button" class="px-4 py-2.5 rounded-xl bg-stone-800 text-white text-sm font-semibold shadow-sm active:scale-[0.98] transition-all">Сохранить порядок</button>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-[28px] p-4 shadow-card border border-white/50">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div>
+                                        <h3 class="font-semibold text-stone-800">Свойства кнопки</h3>
+                                        <p class="text-xs text-stone-400 mt-1">Выберите кнопку слева или создайте новую</p>
+                                    </div>
+                                </div>
+                                <form id="bot-buttons-editor-form" class="space-y-4">
+                                    <div id="bot-buttons-editor" class="text-sm text-stone-400">Кнопка не выбрана</div>
+                                    <div id="bot-buttons-editor-actions" class="hidden space-y-2">
+                                        <button type="submit" class="w-full bg-stone-800 text-white py-3 rounded-[20px] font-bold shadow-card active:scale-[0.98] transition-all">Сохранить</button>
+                                        <button type="button" id="bot-buttons-delete" class="w-full text-rose-500 py-2 font-semibold">Удалить</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Add Button -->
-                    <div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-40">
+                    <div id="admin-add-button" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-40">
                         <button onclick="openAdminModal()" class="bg-stone-800 text-white px-6 py-3 rounded-full shadow-floating font-bold flex items-center gap-2 active:scale-95 transition-transform">
                             <span class="text-xl">+</span> Добавить
                         </button>

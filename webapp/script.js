@@ -266,6 +266,9 @@ window.onload = async () => {
         
         // Инициализируем свайп для закрытия модалок
         initModalSwipe();
+
+        // Инициализируем панель кнопок бота
+        initBotButtonsPanel();
         
         // Загружаем контент и профиль НЕЗАВИСИМО
         // Если один упадет, другой все равно загрузится
@@ -610,6 +613,15 @@ function openBooking() {
 let currentAdminTab = 'users';
 let adminItems = [];
 let currentUserTransactions = [];
+let botButtonsState = {
+    selectedId: null,
+    draft: null,
+    rows: [],
+    extraRows: [],
+    dirtyOrder: false,
+    dragId: null,
+    pendingSelectId: null
+};
 
 // Pull-to-close variables
 let touchStartY = 0;
@@ -738,7 +750,7 @@ async function switchAdminTab(tab) {
             btn.classList.add('bg-white', 'text-stone-500');
         }
     });
-    
+    toggleAdminPanels();
     loadAdminData();
 }
 
@@ -782,9 +794,497 @@ async function loadAdminData() {
     }
 }
 
+function toggleAdminPanels() {
+    const listEl = document.getElementById('admin-list');
+    const panelEl = document.getElementById('bot-buttons-panel');
+    const addBtn = document.getElementById('admin-add-button');
+    if (!listEl || !panelEl) return;
+
+    if (currentAdminTab === 'bot-buttons') {
+        listEl.classList.add('hidden');
+        panelEl.classList.remove('hidden');
+        if (addBtn) addBtn.classList.add('hidden');
+    } else {
+        listEl.classList.remove('hidden');
+        panelEl.classList.add('hidden');
+        if (addBtn) addBtn.classList.remove('hidden');
+    }
+}
+
+function initBotButtonsPanel() {
+    const addRowBtn = document.getElementById('bot-buttons-add-row');
+    const addButtonBtn = document.getElementById('bot-buttons-add-button');
+    const saveOrderBtn = document.getElementById('bot-buttons-save-order');
+    const rowsEl = document.getElementById('bot-buttons-rows');
+    const form = document.getElementById('bot-buttons-editor-form');
+    const deleteBtn = document.getElementById('bot-buttons-delete');
+
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', () => {
+            addBotButtonsRow();
+        });
+    }
+    if (addButtonBtn) {
+        addButtonBtn.addEventListener('click', () => {
+            let targetRow = 1;
+            if (botButtonsState.selectedId && botButtonsState.selectedId !== 'new') {
+                const selectedItem = adminItems.find(item => String(item.id) === String(botButtonsState.selectedId));
+                if (selectedItem) targetRow = safeNumber(selectedItem.row_number, 1);
+            } else if (botButtonsState.rows.length) {
+                targetRow = botButtonsState.rows[botButtonsState.rows.length - 1].rowNumber;
+            }
+            createBotButtonDraft(targetRow);
+        });
+    }
+    if (saveOrderBtn) {
+        saveOrderBtn.addEventListener('click', () => {
+            saveBotButtonsOrder();
+        });
+    }
+    if (form) {
+        form.addEventListener('submit', handleBotButtonsSave);
+    }
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', handleBotButtonsDelete);
+    }
+    if (rowsEl) {
+        rowsEl.addEventListener('click', handleBotButtonsRowClick);
+        rowsEl.addEventListener('dragstart', handleBotButtonsDragStart);
+        rowsEl.addEventListener('dragover', handleBotButtonsDragOver);
+        rowsEl.addEventListener('drop', handleBotButtonsDrop);
+        rowsEl.addEventListener('dragend', () => {
+            botButtonsState.dragId = null;
+        });
+    }
+}
+
+function buildBotButtonsRows(items, extraRows) {
+    const rowsMap = new Map();
+    items.forEach(item => {
+        const rowNumber = safeNumber(item.row_number, 1);
+        if (!rowsMap.has(rowNumber)) rowsMap.set(rowNumber, []);
+        rowsMap.get(rowNumber).push(item);
+    });
+    rowsMap.forEach((rowItems, rowNumber) => {
+        rowItems.sort((a, b) => safeNumber(a.order_in_row, 0) - safeNumber(b.order_in_row, 0));
+    });
+
+    const rowNumbers = Array.from(new Set([...rowsMap.keys(), ...extraRows]));
+    rowNumbers.sort((a, b) => a - b);
+
+    return rowNumbers.map(rowNumber => ({
+        rowNumber,
+        items: rowsMap.get(rowNumber) || []
+    }));
+}
+
+function setSaveOrderButtonState() {
+    const saveOrderBtn = document.getElementById('bot-buttons-save-order');
+    if (!saveOrderBtn) return;
+    if (botButtonsState.dirtyOrder) {
+        saveOrderBtn.disabled = false;
+        saveOrderBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+        saveOrderBtn.disabled = true;
+        saveOrderBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+}
+
+function renderBotButtonsPanel() {
+    const rowsEl = document.getElementById('bot-buttons-rows');
+    const emptyEl = document.getElementById('bot-buttons-empty');
+    if (!rowsEl || !emptyEl) return;
+
+    botButtonsState.rows = buildBotButtonsRows(adminItems, botButtonsState.extraRows);
+
+    if (botButtonsState.pendingSelectId) {
+        const exists = adminItems.some(item => String(item.id) === String(botButtonsState.pendingSelectId));
+        botButtonsState.selectedId = exists ? botButtonsState.pendingSelectId : null;
+        botButtonsState.pendingSelectId = null;
+        botButtonsState.draft = null;
+    } else if (botButtonsState.selectedId && botButtonsState.selectedId !== 'new') {
+        const stillExists = adminItems.some(item => String(item.id) === String(botButtonsState.selectedId));
+        if (!stillExists) {
+            botButtonsState.selectedId = null;
+        }
+    }
+
+    if (!botButtonsState.rows.length) {
+        emptyEl.classList.remove('hidden');
+        rowsEl.innerHTML = '';
+    } else {
+        emptyEl.classList.add('hidden');
+        rowsEl.innerHTML = botButtonsState.rows.map(row => {
+            const buttonsHtml = row.items.map(item => {
+                const safeId = encodeId(item.id);
+                const buttonText = escapeHtml(item.button_text || 'Без названия');
+                const isSelected = String(botButtonsState.selectedId) === String(item.id);
+                const isInactive = item.is_active === false;
+                const isAdminOnly = !!item.is_admin_only;
+                const stateClasses = isSelected ? 'bg-stone-800 text-white' : 'bg-stone-50 text-stone-700';
+                const opacityClass = isInactive ? 'opacity-60' : '';
+                const badge = isAdminOnly ? '<span class="text-[10px] ml-2 px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 font-semibold">A</span>' : '';
+                return `
+                    <button type="button"
+                        class="bot-button px-3 py-2 rounded-xl border border-stone-100 text-xs font-semibold flex items-center ${stateClasses} ${opacityClass}"
+                        draggable="true"
+                        data-button-id="${safeId}"
+                        data-drop-target="button">
+                        <span class="truncate max-w-[120px]">${buttonText}</span>
+                        ${badge}
+                    </button>
+                `;
+            }).join('');
+
+            return `
+                <div class="bg-stone-50 rounded-[22px] p-3 border border-stone-100" data-row-number="${row.rowNumber}">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="text-xs font-semibold text-stone-500">Ряд ${row.rowNumber}</div>
+                        <button type="button" class="text-xs font-semibold text-stone-600" data-add-button-row="${row.rowNumber}">+ Кнопка</button>
+                    </div>
+                    <div class="flex flex-wrap gap-2 min-h-[36px] items-center" data-drop-target="row" data-row-number="${row.rowNumber}">
+                        ${buttonsHtml || '<span class="text-xs text-stone-400">Перетащите кнопку сюда</span>'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderBotButtonsEditor();
+    setSaveOrderButtonState();
+}
+
+function renderBotButtonsEditor() {
+    const editorEl = document.getElementById('bot-buttons-editor');
+    const actionsEl = document.getElementById('bot-buttons-editor-actions');
+    const deleteBtn = document.getElementById('bot-buttons-delete');
+    if (!editorEl || !actionsEl || !deleteBtn) return;
+
+    let item = null;
+    if (botButtonsState.selectedId === 'new') {
+        item = botButtonsState.draft;
+    } else if (botButtonsState.selectedId) {
+        item = adminItems.find(i => String(i.id) === String(botButtonsState.selectedId));
+    }
+
+    if (!item) {
+        editorEl.innerHTML = 'Кнопка не выбрана';
+        editorEl.classList.add('text-stone-400');
+        actionsEl.classList.add('hidden');
+        deleteBtn.classList.add('hidden');
+        return;
+    }
+
+    const safeButtonText = escapeAttr(item.button_text || '');
+    const safeResponseText = escapeHtml(item.response_text || '');
+    const safeHandler = String(item.handler_type || 'info');
+    const safeRow = safeNumber(item.row_number, 1);
+    const safeOrder = safeNumber(item.order_in_row, 0);
+    const safeWebAppUrl = escapeAttr(item.web_app_url || '');
+    const isAdminOnly = !!item.is_admin_only;
+    const isActive = item.is_active !== false;
+
+    editorEl.classList.remove('text-stone-400');
+    editorEl.innerHTML = `
+        <div>
+            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст кнопки</label>
+            <input type="text" name="button_text" value="${safeButtonText}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+        </div>
+        <div>
+            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст ответа</label>
+            <textarea name="response_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-28" required>${safeResponseText}</textarea>
+            <p class="text-xs text-stone-400 mt-1 px-1">Markdown + {YCLIENTS_BOOKING_URL} и {LOYALTY_PERCENTAGE}</p>
+        </div>
+        <div>
+            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Тип обработчика</label>
+            <select name="handler_type" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <option value="book" ${safeHandler === 'book' ? 'selected' : ''}>Запись</option>
+                <option value="info" ${safeHandler === 'info' ? 'selected' : ''}>Информация</option>
+                <option value="profile" ${safeHandler === 'profile' ? 'selected' : ''}>Профиль</option>
+                <option value="admin" ${safeHandler === 'admin' ? 'selected' : ''}>Админка</option>
+            </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Номер строки</label>
+                <input type="number" name="row_number" value="${safeRow}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="1" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Порядок</label>
+                <input type="number" name="order_in_row" value="${safeOrder}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="0" required>
+            </div>
+        </div>
+        <div>
+            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">WebApp URL</label>
+            <input type="text" name="web_app_url" value="${safeWebAppUrl}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="https://example.com/webapp">
+        </div>
+        <div class="flex items-center gap-2 px-1">
+            <input type="checkbox" name="is_admin_only" ${isAdminOnly ? 'checked' : ''} class="w-4 h-4 rounded">
+            <label class="text-sm font-semibold text-stone-600">Только для админов</label>
+        </div>
+        <div class="flex items-center gap-2 px-1">
+            <input type="checkbox" name="is_active" ${isActive ? 'checked' : ''} class="w-4 h-4 rounded">
+            <label class="text-sm font-semibold text-stone-600">Активна</label>
+        </div>
+    `;
+
+    actionsEl.classList.remove('hidden');
+    deleteBtn.classList.toggle('hidden', botButtonsState.selectedId === 'new');
+}
+
+function addBotButtonsRow() {
+    const rowNumbers = botButtonsState.rows.map(row => row.rowNumber);
+    const maxRow = rowNumbers.length ? Math.max(...rowNumbers) : 0;
+    const nextRow = maxRow + 1;
+    if (!botButtonsState.extraRows.includes(nextRow)) {
+        botButtonsState.extraRows.push(nextRow);
+    }
+    renderBotButtonsPanel();
+}
+
+function createBotButtonDraft(rowNumber) {
+    const targetRow = botButtonsState.rows.find(row => row.rowNumber === rowNumber);
+    const defaultOrder = targetRow ? targetRow.items.length : 0;
+    botButtonsState.selectedId = 'new';
+    botButtonsState.draft = {
+        button_text: '',
+        response_text: '',
+        handler_type: 'info',
+        row_number: rowNumber,
+        order_in_row: defaultOrder,
+        web_app_url: '',
+        is_admin_only: false,
+        is_active: true
+    };
+    renderBotButtonsPanel();
+}
+
+function handleBotButtonsRowClick(event) {
+    const addButton = event.target.closest('[data-add-button-row]');
+    if (addButton) {
+        const rowNumber = parseInt(addButton.getAttribute('data-add-button-row'), 10) || 1;
+        createBotButtonDraft(rowNumber);
+        return;
+    }
+
+    const buttonEl = event.target.closest('[data-button-id]');
+    if (buttonEl) {
+        const decodedId = decodeId(buttonEl.getAttribute('data-button-id'));
+        botButtonsState.selectedId = decodedId;
+        botButtonsState.draft = null;
+        renderBotButtonsPanel();
+    }
+}
+
+function handleBotButtonsDragStart(event) {
+    const buttonEl = event.target.closest('[data-button-id]');
+    if (!buttonEl) return;
+    botButtonsState.dragId = decodeId(buttonEl.getAttribute('data-button-id'));
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(botButtonsState.dragId));
+}
+
+function handleBotButtonsDragOver(event) {
+    const target = event.target.closest('[data-drop-target]');
+    if (!target) return;
+    event.preventDefault();
+}
+
+function handleBotButtonsDrop(event) {
+    event.preventDefault();
+    if (!botButtonsState.dragId) return;
+    const rowEl = event.target.closest('[data-row-number]');
+    if (!rowEl) return;
+    const rowNumber = parseInt(rowEl.getAttribute('data-row-number'), 10);
+    if (!rowNumber) return;
+
+    const buttonEl = event.target.closest('[data-button-id]');
+    let targetIndex = 999;
+    if (buttonEl) {
+        const rowButtons = Array.from(rowEl.querySelectorAll('[data-button-id]'));
+        targetIndex = rowButtons.indexOf(buttonEl);
+    }
+    moveBotButtonToRow(botButtonsState.dragId, rowNumber, targetIndex);
+}
+
+function moveBotButtonToRow(buttonId, rowNumber, targetIndex) {
+    const rows = botButtonsState.rows.map(row => ({
+        rowNumber: row.rowNumber,
+        items: [...row.items]
+    }));
+    let draggedItem = null;
+    rows.forEach(row => {
+        const index = row.items.findIndex(item => String(item.id) === String(buttonId));
+        if (index !== -1) {
+            draggedItem = row.items.splice(index, 1)[0];
+        }
+    });
+    if (!draggedItem) return;
+
+    let targetRow = rows.find(row => row.rowNumber === rowNumber);
+    if (!targetRow) {
+        targetRow = { rowNumber, items: [] };
+        rows.push(targetRow);
+        rows.sort((a, b) => a.rowNumber - b.rowNumber);
+    }
+
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+        targetIndex = targetRow.items.length;
+    }
+    if (targetIndex > targetRow.items.length) {
+        targetIndex = targetRow.items.length;
+    }
+    targetRow.items.splice(targetIndex, 0, draggedItem);
+
+    botButtonsState.rows = rows;
+    applyBotButtonsOrderToItems();
+    renderBotButtonsPanel();
+}
+
+function applyBotButtonsOrderToItems() {
+    const itemsMap = new Map(adminItems.map(item => [String(item.id), item]));
+    botButtonsState.rows.forEach(row => {
+        row.items.forEach((item, index) => {
+            const ref = itemsMap.get(String(item.id));
+            if (ref) {
+                ref.row_number = row.rowNumber;
+                ref.order_in_row = index;
+            }
+        });
+    });
+    botButtonsState.dirtyOrder = true;
+    setSaveOrderButtonState();
+}
+
+async function saveBotButtonsOrder() {
+    try {
+        const payload = {
+            items: adminItems.map(item => ({
+                id: item.id,
+                row_number: safeNumber(item.row_number, 1),
+                order_in_row: safeNumber(item.order_in_row, 0)
+            }))
+        };
+        const response = await fetch(`${window.location.origin}/api/admin/bot-buttons/reorder`, {
+            method: 'POST',
+            headers: {
+                'X-Tg-Init-Data': tg.initData || '',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error('Reorder error');
+        botButtonsState.dirtyOrder = false;
+        await loadAdminData();
+        tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        console.error("Reorder error:", error);
+        alert("Ошибка при сохранении порядка");
+    }
+}
+
+async function handleBotButtonsSave(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const selectedId = botButtonsState.selectedId;
+
+    const buttonText = String(formData.get('button_text') || '').trim();
+    const responseText = String(formData.get('response_text') || '').trim();
+    const handlerType = String(formData.get('handler_type') || 'info');
+    const rowNumber = parseInt(formData.get('row_number'), 10) || 1;
+    const orderInRow = parseInt(formData.get('order_in_row'), 10) || 0;
+    const webAppUrl = String(formData.get('web_app_url') || '').trim();
+    const isAdminOnly = form.querySelector('[name="is_admin_only"]')?.checked || false;
+    const isActive = form.querySelector('[name="is_active"]')?.checked || false;
+
+    if (!buttonText) {
+        alert("Введите текст кнопки");
+        return;
+    }
+    if (!responseText) {
+        alert("Введите текст ответа");
+        return;
+    }
+
+    const duplicate = adminItems.some(item => {
+        if (selectedId && selectedId !== 'new' && String(item.id) === String(selectedId)) return false;
+        return String(item.button_text || '').trim() === buttonText;
+    });
+    if (duplicate) {
+        alert("Кнопка с таким текстом уже существует");
+        return;
+    }
+
+    const data = {
+        button_text: buttonText,
+        response_text: responseText,
+        handler_type: handlerType,
+        row_number: rowNumber,
+        order_in_row: orderInRow,
+        web_app_url: webAppUrl ? webAppUrl : null,
+        is_admin_only: isAdminOnly,
+        is_active: isActive
+    };
+
+    const isNew = selectedId === 'new' || !selectedId;
+    const url = isNew ? '/api/admin/bot-buttons' : `/api/admin/bot-buttons/${selectedId}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    try {
+        const response = await fetch(window.location.origin + url, {
+            method,
+            headers: {
+                'X-Tg-Init-Data': tg.initData || '',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error('Save error');
+        const saved = await response.json();
+        botButtonsState.pendingSelectId = saved?.id || (isNew ? null : selectedId);
+        botButtonsState.dirtyOrder = false;
+        await loadAdminData();
+        tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        console.error("Save error:", error);
+        alert("Ошибка при сохранении кнопки");
+    }
+}
+
+async function handleBotButtonsDelete() {
+    const selectedId = botButtonsState.selectedId;
+    if (!selectedId || selectedId === 'new') return;
+    if (!confirm('Удалить эту кнопку?')) return;
+    try {
+        const response = await fetch(`${window.location.origin}/api/admin/bot-buttons/${selectedId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-Tg-Init-Data': tg.initData || '',
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) throw new Error('Delete error');
+        botButtonsState.selectedId = null;
+        botButtonsState.draft = null;
+        await loadAdminData();
+        tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        console.error("Delete error:", error);
+        alert("Ошибка при удалении кнопки");
+    }
+}
+
 function renderAdminList() {
     const listEl = document.getElementById('admin-list');
     if (!listEl) return;
+
+    toggleAdminPanels();
+
+    if (currentAdminTab === 'bot-buttons') {
+        renderBotButtonsPanel();
+        return;
+    }
     
     
     
@@ -912,32 +1412,6 @@ function renderAdminList() {
                         ` : ''}
                     </div>
                 </div>
-            `;
-        }).join('');
-    } else if (currentAdminTab === 'bot-buttons') {
-        listEl.innerHTML = adminItems.map((item, index) => {
-            const safeId = encodeId(item.id);
-            const buttonText = escapeHtml(item.button_text || 'Без названия');
-            const handlerType = escapeHtml(item.handler_type || 'не указан');
-            const rowNumber = safeNumber(item.row_number, 0);
-            const orderInRow = safeNumber(item.order_in_row, 0);
-            return `
-            <div class="bg-white p-4 rounded-[28px] border border-white/50 shadow-card flex items-center gap-3">
-                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${safeId}')">
-                    <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
-                        🔘
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${buttonText}</h4>
-                        <p class="text-xs text-stone-500 truncate font-medium">Строка ${rowNumber}, порядок ${orderInRow} • ${handlerType}</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        ${item.is_admin_only ? '<span class="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-600 font-medium">Админ</span>' : ''}
-                        ${!item.is_active ? '<span class="text-xs px-2 py-1 rounded-full bg-rose-100 text-rose-600 font-medium">Неактивна</span>' : ''}
-                    </div>
-                    <div class="text-stone-300 text-lg">→</div>
-                </div>
-            </div>
             `;
         }).join('');
     } else if (currentAdminTab === 'settings') {
