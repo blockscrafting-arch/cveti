@@ -22,6 +22,56 @@ if (!window.Telegram?.WebApp) {
 // Объявляем tg один раз после проверки/создания
 const tg = window.Telegram?.WebApp || {};
 
+// #region agent log
+window.addEventListener('error', (event) => {
+    try {
+        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'run8',
+                hypothesisId: 'H3',
+                location: 'script.js:30',
+                message: 'Window error',
+                data: {
+                    message: event.message,
+                    filename: event.filename,
+                    lineno: event.lineno,
+                    colno: event.colno,
+                    tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
+                },
+                timestamp: Date.now()
+            })
+        }).catch(() => {});
+    } catch (e) {}
+});
+// #endregion
+
+// #region agent log
+window.addEventListener('unhandledrejection', (event) => {
+    try {
+        const reason = event.reason;
+        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'run8',
+                hypothesisId: 'H2',
+                location: 'script.js:52',
+                message: 'Unhandled rejection',
+                data: {
+                    reason: reason ? (reason.message || String(reason)) : null,
+                    tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
+                },
+                timestamp: Date.now()
+            })
+        }).catch(() => {});
+    } catch (e) {}
+});
+// #endregion
+
 const HTML_ESCAPE_MAP = {
     '&': '&amp;',
     '<': '&lt;',
@@ -412,7 +462,8 @@ async function loadProfile() {
         levelEl.className = "inline-flex px-3 py-1 rounded-full bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 text-xs font-bold uppercase tracking-wide border border-yellow-300";
     }
 
-    renderHistory(data.history || []);
+    const mergedHistory = mergeHistoryItems(data.history || [], data.visits || [], 10);
+    renderHistory(mergedHistory);
     console.log("[DEBUG] Profile loaded successfully");
 }
 
@@ -553,28 +604,98 @@ function renderMasters(masters) {
     }).join('');
 }
 
-function renderHistory(history) {
-    const list = document.getElementById('history-list');
-    if (!list) return;
-    
-    if (!history || !history.length) {
-        list.innerHTML = `
-            <div class="text-center py-8 text-stone-400 text-sm">
-                История операций пуста
-            </div>`;
-        return;
+function getHistoryItemDate(item) {
+    if (!item || typeof item !== 'object') return null;
+    const rawDate = item.item_type === 'visit'
+        ? (item.visit_datetime || item.datetime || item.created_at)
+        : item.created_at;
+    if (!rawDate) return null;
+    const parsed = new Date(rawDate);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getHistoryItemTimestamp(item) {
+    const date = getHistoryItemDate(item);
+    return date ? date.getTime() : 0;
+}
+
+function mergeHistoryItems(history, visits, limit = 10) {
+    const merged = [];
+    if (Array.isArray(history)) {
+        history.forEach((entry) => {
+            if (!entry || typeof entry !== 'object') return;
+            merged.push({ ...entry, item_type: entry.item_type || 'transaction' });
+        });
     }
-    
-    list.innerHTML = history.map(h => {
-        const date = new Date(h.created_at);
-        const expiresAt = h.expires_at ? new Date(h.expires_at) : null;
-        const isExpired = expiresAt && expiresAt < new Date();
-        const daysLeft = expiresAt ? Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24)) : null;
-        const description = escapeHtml(h.description);
-        const amount = safeNumber(h.amount, 0);
-        const remainingAmount = Number.isFinite(Number(h.remaining_amount)) ? Number(h.remaining_amount) : null;
-        
-        return `
+    if (Array.isArray(visits)) {
+        visits.forEach((visit) => {
+            if (!visit || typeof visit !== 'object') return;
+            merged.push({ ...visit, item_type: 'visit' });
+        });
+    }
+    merged.sort((a, b) => getHistoryItemTimestamp(b) - getHistoryItemTimestamp(a));
+    return merged.slice(0, limit);
+}
+
+function formatVisitAmount(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) return '—';
+    return `${Math.round(amount).toLocaleString('ru-RU')} ₽`;
+}
+
+function getVisitStatusClass(status) {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized.includes('отмен') || normalized.includes('не приш')) {
+        return 'text-rose-500';
+    }
+    if (normalized.includes('ожида')) {
+        return 'text-orange-500';
+    }
+    if (normalized.includes('подтверж') || normalized.includes('состоял')) {
+        return 'text-green-600';
+    }
+    return 'text-stone-400';
+}
+
+function renderVisitHistoryItem(visit) {
+    const visitDate = getHistoryItemDate(visit);
+    const dateText = visitDate
+        ? visitDate.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
+    const services = Array.isArray(visit.services) ? visit.services.filter(Boolean).map(escapeHtml) : [];
+    const servicesText = services.length ? services.join(', ') : 'Посещение';
+    const masterText = visit.master ? escapeHtml(visit.master) : '';
+    const rawStatus = visit.status || 'Запись';
+    const statusText = escapeHtml(rawStatus);
+    const statusClass = getVisitStatusClass(rawStatus);
+    const amountText = formatVisitAmount(visit.amount);
+
+    return `
+        <div class="flex justify-between items-center p-5 bg-white rounded-[28px] border border-white/50 shadow-card mb-3">
+            <div class="flex-1">
+                <div class="text-sm font-semibold text-stone-800 mb-1">${servicesText}</div>
+                <div class="text-xs text-stone-500 font-medium mb-1">${dateText}</div>
+                ${masterText ? `<div class="text-xs text-stone-500 font-medium mb-1">Мастер: ${masterText}</div>` : ''}
+                <div class="text-xs ${statusClass} font-medium">${statusText}</div>
+            </div>
+            <div class="text-right ml-4">
+                <div class="font-bold text-lg text-stone-800">${amountText}</div>
+                <div class="text-[10px] uppercase tracking-wide text-stone-400 mt-1">визит</div>
+            </div>
+        </div>
+        `;
+}
+
+function renderTransactionHistoryItem(h) {
+    const date = new Date(h.created_at);
+    const expiresAt = h.expires_at ? new Date(h.expires_at) : null;
+    const isExpired = expiresAt && expiresAt < new Date();
+    const daysLeft = expiresAt ? Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24)) : null;
+    const description = escapeHtml(h.description);
+    const amount = safeNumber(h.amount, 0);
+    const remainingAmount = Number.isFinite(Number(h.remaining_amount)) ? Number(h.remaining_amount) : null;
+
+    return `
         <div class="flex justify-between items-center p-5 bg-white rounded-[28px] border border-white/50 shadow-card mb-3">
             <div class="flex-1">
                 <div class="text-sm font-semibold text-stone-800 mb-1">${description}</div>
@@ -595,6 +716,25 @@ function renderHistory(history) {
             </div>
         </div>
         `;
+}
+
+function renderHistory(history) {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+    
+    if (!history || !history.length) {
+        list.innerHTML = `
+            <div class="text-center py-8 text-stone-400 text-sm">
+                История операций пуста
+            </div>`;
+        return;
+    }
+    
+    list.innerHTML = history.map(h => {
+        if (h?.item_type === 'visit') {
+            return renderVisitHistoryItem(h);
+        }
+        return renderTransactionHistoryItem(h);
     }).join('');
 }
 
@@ -760,6 +900,21 @@ async function loadAdminData() {
     
     try {
         console.log(`[DEBUG] Loading admin data for tab: ${currentAdminTab}`);
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'run8',
+                hypothesisId: 'H1',
+                location: 'script.js:860',
+                message: 'loadAdminData start',
+                data: { tab: currentAdminTab },
+                timestamp: Date.now()
+            })
+        }).catch(() => {});
+        // #endregion
         
         if (currentAdminTab === 'broadcasts') {
             adminItems = await apiFetch(`/api/admin/broadcasts`);
@@ -781,6 +936,25 @@ async function loadAdminData() {
         }
         
         console.log(`[DEBUG] Loaded ${adminItems.length} items for ${currentAdminTab}`);
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'run8',
+                hypothesisId: 'H1',
+                location: 'script.js:885',
+                message: 'loadAdminData fetched',
+                data: {
+                    tab: currentAdminTab,
+                    isArray: Array.isArray(adminItems),
+                    length: Array.isArray(adminItems) ? adminItems.length : null
+                },
+                timestamp: Date.now()
+            })
+        }).catch(() => {});
+        // #endregion
         renderAdminList();
     } catch (error) {
         
@@ -1326,6 +1500,30 @@ function renderAdminList() {
             `;
         }).join('');
     } else if (currentAdminTab === 'broadcasts') {
+        // #region agent log
+        try {
+            const first = adminItems[0] || {};
+            fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: 'debug-session',
+                    runId: 'run8',
+                    hypothesisId: 'H1',
+                    location: 'script.js:1420',
+                    message: 'renderAdminList broadcasts',
+                    data: {
+                        count: Array.isArray(adminItems) ? adminItems.length : null,
+                        keys: Object.keys(first || {}),
+                        hasMessage: Object.prototype.hasOwnProperty.call(first, 'message'),
+                        hasContent: Object.prototype.hasOwnProperty.call(first, 'content'),
+                        hasTitle: Object.prototype.hasOwnProperty.call(first, 'title')
+                    },
+                    timestamp: Date.now()
+                })
+            }).catch(() => {});
+        } catch (e) {}
+        // #endregion
         listEl.innerHTML = adminItems.map(item => {
             const statusColors = {
                 'pending': 'bg-yellow-100 text-yellow-800',
