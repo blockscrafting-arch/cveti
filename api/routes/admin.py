@@ -35,6 +35,103 @@ async def _normalize_orders(table_name: str, items: List[Dict[str, Any]]):
             continue
         await supabase.table(table_name).update({"order": idx}).eq("id", item_id).execute()
 
+def _extract_missing_column_from_error(error: Exception) -> Optional[str]:
+    error_str = str(error)
+    error_text = ""
+    response = getattr(error, "response", None)
+    if response is not None:
+        try:
+            error_text = response.text or ""
+        except Exception:
+            error_text = ""
+    if error_text:
+        try:
+            parsed = json.loads(error_text)
+            if isinstance(parsed, dict) and "message" in parsed:
+                error_text = parsed.get("message") or error_text
+        except Exception:
+            pass
+    match = re.search(r"Could not find the '([^']+)' column", error_text or error_str)
+    return match.group(1) if match else None
+
+async def _safe_broadcast_update(broadcast_id: str, update_data: Dict[str, Any]):
+    pending_data = dict(update_data)
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "debug-session",
+            "runId": "run6",
+            "hypothesisId": "C2",
+            "location": "admin.py:60",
+            "message": "Broadcast update start",
+            "data": {"id": broadcast_id, "keys": sorted(list(pending_data.keys()))},
+            "timestamp": int(datetime.now().timestamp() * 1000)
+        }
+        try:
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+        except Exception:
+            pass
+        print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+    except Exception:
+        pass
+    # #endregion
+    for _ in range(6):
+        if not pending_data:
+            return
+        try:
+            await supabase.table("broadcasts").update(pending_data).eq("id", broadcast_id).execute()
+            # #region agent log
+            try:
+                payload = {
+                    "sessionId": "debug-session",
+                    "runId": "run6",
+                    "hypothesisId": "C2",
+                    "location": "admin.py:85",
+                    "message": "Broadcast update success",
+                    "data": {"id": broadcast_id, "keys": sorted(list(pending_data.keys()))},
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                try:
+                    with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                        json.dump(payload, f, ensure_ascii=False)
+                        f.write('\n')
+                except Exception:
+                    pass
+                print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+            except Exception:
+                pass
+            # #endregion
+            return
+        except Exception as update_error:
+            missing_col = _extract_missing_column_from_error(update_error)
+            if missing_col and missing_col in pending_data:
+                pending_data.pop(missing_col, None)
+                # #region agent log
+                try:
+                    payload = {
+                        "sessionId": "debug-session",
+                        "runId": "run6",
+                        "hypothesisId": "C2",
+                        "location": "admin.py:104",
+                        "message": "Broadcast update missing column removed",
+                        "data": {"missing_col": missing_col, "keys": sorted(list(pending_data.keys()))},
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    try:
+                        with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                            json.dump(payload, f, ensure_ascii=False)
+                            f.write('\n')
+                    except Exception:
+                        pass
+                    print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+                except Exception:
+                    pass
+                # #endregion
+                continue
+            raise
+
 # Глобальный Bot экземпляр для рассылок
 _broadcast_bot: Bot = None
 
@@ -828,10 +925,10 @@ async def check_scheduled_broadcasts():
             for broadcast in res.data:
                 broadcast_id = broadcast["id"]
                 # Меняем статус на pending и запускаем отправку
-                await supabase.table("broadcasts").update({
+                await _safe_broadcast_update(str(broadcast_id), {
                     "status": "pending",
                     "scheduled_at": None  # Убираем запланированную дату
-                }).eq("id", broadcast_id).execute()
+                })
                 
                 # Запускаем отправку (в фоне через asyncio.create_task)
                 import asyncio
@@ -854,7 +951,7 @@ async def process_broadcast(broadcast_id: str):
         image_url = broadcast.get("image_url")
 
         # Обновляем статус на "sending"
-        await supabase.table("broadcasts").update({"status": "sending"}).eq("id", broadcast_id).execute()
+        await _safe_broadcast_update(str(broadcast_id), {"status": "sending"})
         
         # Получаем список получателей
         recipients = []
@@ -921,21 +1018,21 @@ async def process_broadcast(broadcast_id: str):
         # Обновляем статус
         # Если все отправлено успешно - completed, если есть ошибки - тоже completed (но с failed_count > 0)
         status = "completed"
-        await supabase.table("broadcasts").update({
+        await _safe_broadcast_update(str(broadcast_id), {
             "status": status,
             "sent_count": sent_count,
             "failed_count": failed_count
-        }).eq("id", broadcast_id).execute()
+        })
         
         logger.info(f"Broadcast {broadcast_id} completed: {sent_count} sent, {failed_count} failed")
         
     except Exception as e:
         logger.error(f"Error processing broadcast {broadcast_id}: {e}", exc_info=True)
         try:
-            await supabase.table("broadcasts").update({
+            await _safe_broadcast_update(str(broadcast_id), {
                 "status": "failed",
                 "failed_count": 0
-            }).eq("id", broadcast_id).execute()
+            })
         except:
             pass
 
@@ -1185,12 +1282,12 @@ async def send_broadcast(id: str, background_tasks: BackgroundTasks, _: int = De
             raise HTTPException(status_code=400, detail=f"Broadcast is already {broadcast['status']}")
         
         # Сбрасываем счетчики и статус
-        await supabase.table("broadcasts").update({
+        await _safe_broadcast_update(str(id), {
             "status": "pending",
             "sent_count": 0,
             "failed_count": 0,
             "scheduled_at": None  # Убираем запланированную дату при ручной отправке
-        }).eq("id", id).execute()
+        })
         
         # Запускаем отправку в фоне
         background_tasks.add_task(process_broadcast, id)
