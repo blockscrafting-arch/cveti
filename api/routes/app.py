@@ -39,9 +39,9 @@ async def get_app_profile(x_tg_init_data: Optional[str] = Header(None)):
         
         # Синхронизируем баланс с YClients в приоритете
         try:
-            synced_balance = await sync_user_with_yclients(user["id"])
-            if synced_balance is not None:
-                user["balance"] = synced_balance
+            sync_result = await sync_user_with_yclients(user["id"])
+            if sync_result:
+                user["balance"] = sync_result.get("balance", user.get("balance", 0))
             else:
                 # Если синхронизация не удалась (например, не нашли в YClients), 
                 # считаем по нашей базе как раньше

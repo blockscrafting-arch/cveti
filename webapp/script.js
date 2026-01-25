@@ -22,70 +22,6 @@ if (!window.Telegram?.WebApp) {
 // Объявляем tg один раз после проверки/создания
 const tg = window.Telegram?.WebApp || {};
 
-// #region agent log
-function sendClientLog(payload) {
-    try {
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).catch(() => {});
-    } catch (e) {}
-    try {
-        fetch(`${window.location.origin}/api/admin/client-log`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Tg-Init-Data': tg?.initData || ''
-            },
-            body: JSON.stringify(payload)
-        }).catch(() => {});
-    } catch (e) {}
-}
-// #endregion
-
-// #region agent log
-window.addEventListener('error', (event) => {
-    try {
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run8',
-            hypothesisId: 'H3',
-            location: 'script.js:30',
-            message: 'Window error',
-            data: {
-                message: event.message,
-                filename: event.filename,
-                lineno: event.lineno,
-                colno: event.colno,
-                tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null,
-                stack: event.error?.stack || null
-            },
-            timestamp: Date.now()
-        });
-    } catch (e) {}
-});
-// #endregion
-
-// #region agent log
-window.addEventListener('unhandledrejection', (event) => {
-    try {
-        const reason = event.reason;
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run8',
-            hypothesisId: 'H2',
-            location: 'script.js:52',
-            message: 'Unhandled rejection',
-            data: {
-                reason: reason ? (reason.message || String(reason)) : null,
-                tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
-            },
-            timestamp: Date.now()
-        });
-    } catch (e) {}
-});
-// #endregion
 
 const HTML_ESCAPE_MAP = {
     '&': '&amp;',
@@ -234,14 +170,11 @@ function loadUserAvatar() {
             avatarImg.classList.remove('hidden');
             avatarIcon.classList.add('hidden');
             avatarBtn.classList.remove('bg-stone-100');
-            console.log("[DEBUG] User avatar loaded from Telegram");
         } else {
             // Если фото нет - убираем аватарку совсем (скрываем кнопку)
             avatarBtn.style.display = 'none';
-            console.log("[DEBUG] No user avatar available, hiding avatar button");
         }
     } catch (error) {
-        console.warn("[DEBUG] Error loading avatar:", error);
         // В случае ошибки просто скрываем аватарку
         const avatarBtn = document.getElementById('avatar-btn');
         if (avatarBtn) avatarBtn.style.display = 'none';
@@ -289,8 +222,6 @@ function setupHorizontalScroll() {
 
 // Функция для скрытия лоадера (гарантированно вызывается)
 function hideLoader() {
-    console.log("[DEBUG] Hiding loader");
-    
     if (loader) {
         loader.classList.add('opacity-0');
         setTimeout(() => {
@@ -309,8 +240,6 @@ function hideLoader() {
 }
 
 window.onload = async () => {
-    console.log("[DEBUG] Window onload started");
-    
     // Засекаем время начала загрузки для гарантированного минимума
     const loadStartTime = Date.now();
     const MIN_LOADER_TIME = 2000; // Минимум 2 секунды для анимации
@@ -342,7 +271,6 @@ window.onload = async () => {
         // Загружаем контент (не требует авторизации)
         loadPromises.push(
             loadContent().catch(error => {
-                console.error("[DEBUG] Error loading content:", error);
                 // Показываем пустые списки
                 renderPromotions([]);
                 renderServices([]);
@@ -353,7 +281,6 @@ window.onload = async () => {
         // Загружаем профиль (требует авторизации, может упасть)
         loadPromises.push(
             loadProfile().catch(error => {
-                console.error("[DEBUG] Error loading profile:", error);
                 // Устанавливаем дефолтные значения
                 const nameEl = document.getElementById('user-name');
                 const balanceEl = document.getElementById('user-balance');
@@ -375,12 +302,7 @@ window.onload = async () => {
         // Ждем завершения всех загрузок (даже с ошибками)
         await Promise.allSettled(loadPromises);
         
-        console.log("[DEBUG] All loads completed");
-        
-        
     } catch (error) {
-        console.error("[DEBUG] Init Error:", error);
-        
         // Все равно показываем интерфейс
     } finally {
         // Гарантируем минимум 2 секунды отображения лоадера для анимации
@@ -399,31 +321,19 @@ async function apiFetch(endpoint) {
     // Добавляем timestamp для предотвращения кеширования
     url.searchParams.append('_t', Date.now());
     
-    console.log(`[DEBUG] Fetching: ${url.toString()}`);
-    
-    
     try {
         const response = await fetch(url.toString(), {
             headers: { 'X-Tg-Init-Data': tg?.initData || '' }
         });
         
-        console.log(`[DEBUG] Response status: ${response.status} for ${endpoint}`);
-        
-        
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`[DEBUG] API Error ${response.status}: ${errorText}`);
-            
             throw new Error(`API Error ${response.status}: ${errorText}`);
         }
         
         const data = await response.json();
-        console.log(`[DEBUG] Successfully fetched ${endpoint}`);
-        
         return data;
     } catch (error) {
-        console.error(`[DEBUG] Fetch error for ${endpoint}:`, error);
-        
         throw error;
     }
 }
@@ -431,7 +341,6 @@ async function apiFetch(endpoint) {
 // ---- Render Functions ----
 
 async function loadContent() {
-    console.log("[DEBUG] Loading content...");
     const data = await apiFetch('/api/app/content');
     if (data.booking_url) {
         const safeBookingUrl = safeUrl(data.booking_url);
@@ -441,15 +350,11 @@ async function loadContent() {
     renderPromotions(data.promotions || []);
     renderServices(data.services || []);
     renderMasters(data.masters || []);
-    console.log("[DEBUG] Content loaded successfully");
 }
 
 async function loadProfile() {
-    console.log("[DEBUG] Loading profile...");
-    
     // Проверяем, есть ли initData
     if (!tg.initData) {
-        console.warn("[DEBUG] No initData from Telegram, skipping profile load");
         throw new Error("No Telegram initData");
     }
     
@@ -479,7 +384,6 @@ async function loadProfile() {
 
     const mergedHistory = mergeHistoryItems(data.history || [], data.visits || [], 10);
     renderHistory(mergedHistory);
-    console.log("[DEBUG] Profile loaded successfully");
 }
 
 function renderPromotions(promos) {
@@ -914,19 +818,6 @@ async function loadAdminData() {
     if (listEl) listEl.innerHTML = '<div class="h-20 skeleton w-full"></div><div class="h-20 skeleton w-full"></div>';
     
     try {
-        console.log(`[DEBUG] Loading admin data for tab: ${currentAdminTab}`);
-        // #region agent log
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run8',
-            hypothesisId: 'H1',
-            location: 'script.js:860',
-            message: 'loadAdminData start',
-            data: { tab: currentAdminTab },
-            timestamp: Date.now()
-        });
-        // #endregion
-        
         if (currentAdminTab === 'broadcasts') {
             adminItems = await apiFetch(`/api/admin/broadcasts`);
         } else if (currentAdminTab === 'bot-buttons') {
@@ -946,26 +837,8 @@ async function loadAdminData() {
             adminItems = await apiFetch(`/api/admin/${currentAdminTab}`);
         }
         
-        console.log(`[DEBUG] Loaded ${adminItems.length} items for ${currentAdminTab}`);
-        // #region agent log
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run8',
-            hypothesisId: 'H1',
-            location: 'script.js:885',
-            message: 'loadAdminData fetched',
-            data: {
-                tab: currentAdminTab,
-                isArray: Array.isArray(adminItems),
-                length: Array.isArray(adminItems) ? adminItems.length : null
-            },
-            timestamp: Date.now()
-        });
-        // #endregion
         renderAdminList();
     } catch (error) {
-        
-        console.error(`[DEBUG] Admin data load error for ${currentAdminTab}:`, error);
         if (listEl) {
             listEl.innerHTML = `<div class="text-center py-10 text-rose-500">
                 <div class="font-semibold mb-2">Ошибка загрузки</div>
@@ -1077,25 +950,6 @@ function renderBotButtonsPanel() {
     if (!rowsEl || !emptyEl) return;
 
     botButtonsState.rows = buildBotButtonsRows(adminItems, botButtonsState.extraRows);
-
-    // #region agent log
-    try {
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run10',
-            hypothesisId: 'H6',
-            location: 'script.js:1079',
-            message: 'renderBotButtonsPanel state',
-            data: {
-                rowsCount: botButtonsState.rows.length,
-                itemsCount: Array.isArray(adminItems) ? adminItems.length : null,
-                extraRows: botButtonsState.extraRows.length,
-                selectedId: botButtonsState.selectedId || null
-            },
-            timestamp: Date.now()
-        });
-    } catch (e) {}
-    // #endregion
 
     if (botButtonsState.pendingSelectId) {
         const exists = adminItems.some(item => String(item.id) === String(botButtonsState.pendingSelectId));
@@ -1526,26 +1380,6 @@ function renderAdminList() {
             `;
         }).join('');
     } else if (currentAdminTab === 'broadcasts') {
-        // #region agent log
-        try {
-            const first = adminItems[0] || {};
-            sendClientLog({
-                sessionId: 'debug-session',
-                runId: 'run8',
-                hypothesisId: 'H1',
-                location: 'script.js:1420',
-                message: 'renderAdminList broadcasts',
-                data: {
-                    count: Array.isArray(adminItems) ? adminItems.length : null,
-                    keys: Object.keys(first || {}),
-                    hasMessage: Object.prototype.hasOwnProperty.call(first, 'message'),
-                    hasContent: Object.prototype.hasOwnProperty.call(first, 'content'),
-                    hasTitle: Object.prototype.hasOwnProperty.call(first, 'title')
-                },
-                timestamp: Date.now()
-            });
-        } catch (e) {}
-        // #endregion
         listEl.innerHTML = adminItems.map(item => {
             const statusColors = {
                 'pending': 'bg-yellow-100 text-yellow-800',
@@ -1954,27 +1788,6 @@ function renderFormFields(item = {}) {
         isAdminOnly: !!item.is_admin_only
     };
 
-    // #region agent log
-    try {
-        if (currentAdminTab === 'broadcasts') {
-            sendClientLog({
-                sessionId: 'debug-session',
-                runId: 'run9',
-                hypothesisId: 'H4',
-                location: 'script.js:1918',
-                message: 'renderFormFields broadcasts',
-                data: {
-                    hasMessage: Object.prototype.hasOwnProperty.call(item, 'message'),
-                    hasContent: Object.prototype.hasOwnProperty.call(item, 'content'),
-                    hasTitle: Object.prototype.hasOwnProperty.call(item, 'title'),
-                    messageLen: safe.message.length
-                },
-                timestamp: Date.now()
-            });
-        }
-    } catch (e) {}
-    // #endregion
-
     if (currentAdminTab === 'users') {
         html = `
             <div>
@@ -2201,55 +2014,6 @@ function renderFormFields(item = {}) {
     
     // Добавляем обработчики для загрузки файлов
     setupImageUploadHandlers();
-
-    // #region agent log
-    try {
-        if (currentAdminTab === 'broadcasts') {
-            const messageEl = fieldsEl.querySelector('textarea[name="message"]');
-            if (!messageEl) {
-                sendClientLog({
-                    sessionId: 'debug-session',
-                    runId: 'run10',
-                    hypothesisId: 'H4',
-                    location: 'script.js:2060',
-                    message: 'broadcast message textarea missing',
-                    data: {},
-                    timestamp: Date.now()
-                });
-            } else {
-                messageEl.addEventListener('focus', () => {
-                    if (messageEl.dataset.logFocus) return;
-                    messageEl.dataset.logFocus = '1';
-                    sendClientLog({
-                        sessionId: 'debug-session',
-                        runId: 'run10',
-                        hypothesisId: 'H4',
-                        location: 'script.js:2068',
-                        message: 'broadcast message focus',
-                        data: {
-                            disabled: !!messageEl.disabled,
-                            readOnly: !!messageEl.readOnly
-                        },
-                        timestamp: Date.now()
-                    });
-                });
-                messageEl.addEventListener('input', () => {
-                    if (messageEl.dataset.logInput) return;
-                    messageEl.dataset.logInput = '1';
-                    sendClientLog({
-                        sessionId: 'debug-session',
-                        runId: 'run10',
-                        hypothesisId: 'H5',
-                        location: 'script.js:2079',
-                        message: 'broadcast message input',
-                        data: { length: messageEl.value.length },
-                        timestamp: Date.now()
-                    });
-                });
-            }
-        }
-    } catch (e) {}
-    // #endregion
     
     // Показываем/скрываем фильтры по балансу и выбор пользователей
     if (currentAdminTab === 'broadcasts') {
@@ -2790,24 +2554,6 @@ async function handleAdminSubmit(e) {
             data.recipient_ids = [];
         }
 
-        // #region agent log
-        try {
-            const messageValue = formData.get('message');
-            sendClientLog({
-                sessionId: 'debug-session',
-                runId: 'run9',
-                hypothesisId: 'H5',
-                location: 'script.js:2588',
-                message: 'handleAdminSubmit broadcasts',
-                data: {
-                    messageLen: messageValue ? String(messageValue).length : 0,
-                    recipientType: data.recipient_type
-                },
-                timestamp: Date.now()
-            });
-        } catch (e) {}
-        // #endregion
-        
         if (data.recipient_type === 'by_balance') {
             const min = formData.get('filter_balance_min');
             const max = formData.get('filter_balance_max');

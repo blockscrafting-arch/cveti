@@ -12,18 +12,23 @@ from bot.services.settings import get_setting
 from bot.services.yclients_api import yclients
 from bot.config import settings
 from typing import Optional, Tuple, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def sync_user_with_yclients(user_id: int) -> Optional[int]:
+async def sync_user_with_yclients(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Синхронизирует данные пользователя с YClients:
     1. Ищет клиента в YClients по телефону
     2. Получает актуальный баланс и детали карты
     3. Обновляет данные в нашей базе
     4. Логирует изменения баланса если они произошли извне
+    
+    Returns:
+        dict с ключами:
+          - balance: актуальный баланс по данным YClients
+          - diff: разница между балансом YClients и локальным балансом
     """
     try:
         # Получаем данные пользователя из нашей базы
@@ -34,7 +39,12 @@ async def sync_user_with_yclients(user_id: int) -> Optional[int]:
         user = user_res.data[0]
         phone = user.get("phone")
         yclients_id = user.get("yclients_id")
+        # Берем локальный баланс через RPC (учитывает истекшие баллы)
         old_balance = user.get("balance") or 0
+        try:
+            old_balance = await get_user_available_balance(user_id)
+        except Exception as balance_err:
+            logger.warning(f"Could not get available balance for user {user_id}, fallback to users.balance: {balance_err}")
         
         # 1. Если нет yclients_id, ищем по телефону
         if not yclients_id and phone:
@@ -91,6 +101,13 @@ async def sync_user_with_yclients(user_id: int) -> Optional[int]:
                     logger.error(f"Error calling adjust_loyalty_balance for user {user_id}: {sync_err}")
                     # Fallback на простое обновление если RPC не сработал
                     await supabase.table("users").update({"balance": balance}).eq("id", user_id).execute()
+            else:
+                # Если локальный баланс мог устареть (например, истекли баллы), обновляем его
+                if user.get("balance") != old_balance:
+                    await supabase.table("users").update({
+                        "balance": old_balance,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }).eq("id", user_id).execute()
 
             # 4. Обновляем дополнительные поля (номер карты, статус, время синхронизации)
             await supabase.table("users").update({
@@ -101,7 +118,7 @@ async def sync_user_with_yclients(user_id: int) -> Optional[int]:
             }).eq("id", user_id).execute()
             
             logger.debug(f"Synced user {user_id}: balance={balance}, card={card_number}")
-            return balance
+            return {"balance": balance, "diff": diff}
         else:
             logger.debug(f"No loyalty info found for user {user_id} (yclients_id: {yclients_id})")
             
@@ -121,8 +138,8 @@ async def process_loyalty_payment(phone: str, amount: float, visit_id: int):
     """
     Основная логика:
     1. Поиск клиента по телефону
-    2. Если клиент есть -> начисляем баллы
-    3. Создаем транзакцию в истории
+    2. Синхронизация с YClients как источником истины
+    3. Возвращаем разницу баланса для уведомления
     
     Защита от race condition:
     - Используем UNIQUE constraint на visit_id в БД
@@ -142,62 +159,19 @@ async def process_loyalty_payment(phone: str, amount: float, visit_id: int):
             return None, "Пользователь не найден в системе"
         
         user = user_res.data[0]
-        points = await calculate_points(amount)
+        # YClients является источником истины по балансу
+        sync_result = await sync_user_with_yclients(user["id"])
+        if not sync_result:
+            logger.warning(f"YClients sync failed for user {user['id']} (visit_id: {visit_id})")
+            return None, "Не удалось синхронизировать баланс с YClients"
         
-        if points <= 0:
-            logger.warning(f"Zero or negative points calculated for amount: {amount}")
-            return None, "Сумма слишком мала для начисления баллов"
-        
-        # Получаем срок жизни баллов из БД (fallback на config.py)
-        expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
-        
-        # Пытаемся создать транзакцию с visit_id
-        # UNIQUE constraint на visit_id защитит от дубликатов
-        expires_at = datetime.utcnow() + timedelta(days=expiration_days)
-        
-        try:
-            await supabase.table("loyalty_transactions").insert({
-                "user_id": user["id"],
-                "amount": points,
-                "transaction_type": "earn",
-                "description": f"Начисление за визит (чек: {amount}р)",
-                "visit_id": visit_id,
-                "expires_at": expires_at.isoformat(),
-                "remaining_amount": points
-            }).execute()
-        except Exception as e:
-            error_str = str(e).lower()
-            if "unique" in error_str or "duplicate" in error_str or "violates unique constraint" in error_str:
-                logger.info(f"Duplicate payment detected for visit_id: {visit_id}")
-                return None, "Этот платеж уже был обработан"
-            logger.error(f"Error inserting transaction: {e}")
-            raise
-        
-        # ВАЖНО: Обновляем баланс в локальной таблице users ПЕРЕД синхронизацией,
-        # чтобы sync_user_with_yclients увидел актуальный локальный баланс и не создал дубликат коррекции
-        try:
-            balance_result = await supabase.rpc("get_user_available_balance", {
-                "p_user_id": user["id"]
-            }).execute()
-            new_local_balance = balance_result.data if balance_result.data is not None else user["balance"] + points
-            
-            await supabase.table("users").update({
-                "balance": new_local_balance,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("id", user["id"]).execute()
-            
-            # Теперь синхронизируемся с YClients для финальной сверки
-            synced_balance = await sync_user_with_yclients(user["id"])
-            if synced_balance is not None:
-                new_balance = synced_balance
-            else:
-                new_balance = new_local_balance
-        except Exception as e:
-            logger.warning(f"Error during balance update or sync: {e}")
-            new_balance = user["balance"] + points
-        
-        logger.info(f"Points awarded: user_id={user['id']}, points={points}, visit_id={visit_id}, expires_at={expires_at.isoformat()}")
-        return user["tg_id"], points
+        diff = int(sync_result.get("diff") or 0)
+        points_awarded = max(diff, 0)
+        logger.info(
+            f"YClients sync after payment: user_id={user['id']}, visit_id={visit_id}, "
+            f"diff={diff}, awarded={points_awarded}"
+        )
+        return user["tg_id"], points_awarded
         
     except Exception as e:
         logger.error(f"Error in process_loyalty_payment: {e}", exc_info=True)

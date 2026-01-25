@@ -3,6 +3,7 @@ from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.notifications import send_broadcast_message
 from bot.services.storage import get_storage_service
+from bot.services.settings import get_setting
 from bot.config import settings
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
@@ -14,49 +15,6 @@ from datetime import datetime
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
-
-@router.post("/client-log")
-async def client_log(payload: Dict[str, Any]):
-    """Принимает клиентские логи из webapp для отладки."""
-    try:
-        safe_payload = {
-            "sessionId": payload.get("sessionId"),
-            "runId": payload.get("runId"),
-            "hypothesisId": payload.get("hypothesisId"),
-            "location": payload.get("location"),
-            "message": payload.get("message"),
-            "timestamp": payload.get("timestamp"),
-            "data": {}
-        }
-        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
-        safe_payload["data"] = {
-            "message": data.get("message"),
-            "filename": data.get("filename"),
-            "lineno": data.get("lineno"),
-            "colno": data.get("colno"),
-            "tab": data.get("tab"),
-            "reason": data.get("reason"),
-            "stack": data.get("stack"),
-            "keys": data.get("keys"),
-            "count": data.get("count"),
-            "length": data.get("length"),
-            "isArray": data.get("isArray"),
-            "hasMessage": data.get("hasMessage"),
-            "hasContent": data.get("hasContent"),
-            "hasTitle": data.get("hasTitle")
-        }
-        log_line = json.dumps(safe_payload, ensure_ascii=False)
-        logger.info(f"CLIENT_DEBUG_LOG {log_line}")
-        try:
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                f.write(log_line + '\n')
-        except Exception:
-            pass
-        print(f"CLIENT_DEBUG_LOG {log_line}")
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Error in client_log: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Client log error")
 def _coerce_order(value):
     try:
         return int(value)
@@ -99,79 +57,16 @@ def _extract_missing_column_from_error(error: Exception) -> Optional[str]:
 
 async def _safe_broadcast_update(broadcast_id: str, update_data: Dict[str, Any]):
     pending_data = dict(update_data)
-    # #region agent log
-    try:
-        payload = {
-            "sessionId": "debug-session",
-            "runId": "run6",
-            "hypothesisId": "C2",
-            "location": "admin.py:60",
-            "message": "Broadcast update start",
-            "data": {"id": broadcast_id, "keys": sorted(list(pending_data.keys()))},
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        try:
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-        except Exception:
-            pass
-        print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-    except Exception:
-        pass
-    # #endregion
     for _ in range(6):
         if not pending_data:
             return
         try:
             await supabase.table("broadcasts").update(pending_data).eq("id", broadcast_id).execute()
-            # #region agent log
-            try:
-                payload = {
-                    "sessionId": "debug-session",
-                    "runId": "run6",
-                    "hypothesisId": "C2",
-                    "location": "admin.py:85",
-                    "message": "Broadcast update success",
-                    "data": {"id": broadcast_id, "keys": sorted(list(pending_data.keys()))},
-                    "timestamp": int(datetime.now().timestamp() * 1000)
-                }
-                try:
-                    with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                        json.dump(payload, f, ensure_ascii=False)
-                        f.write('\n')
-                except Exception:
-                    pass
-                print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-            except Exception:
-                pass
-            # #endregion
             return
         except Exception as update_error:
             missing_col = _extract_missing_column_from_error(update_error)
             if missing_col and missing_col in pending_data:
                 pending_data.pop(missing_col, None)
-                # #region agent log
-                try:
-                    payload = {
-                        "sessionId": "debug-session",
-                        "runId": "run6",
-                        "hypothesisId": "C2",
-                        "location": "admin.py:104",
-                        "message": "Broadcast update missing column removed",
-                        "data": {"missing_col": missing_col, "keys": sorted(list(pending_data.keys()))},
-                        "timestamp": int(datetime.now().timestamp() * 1000)
-                    }
-                    try:
-                        with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                            json.dump(payload, f, ensure_ascii=False)
-                            f.write('\n')
-                    except Exception:
-                        pass
-                    print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-                except Exception:
-                    pass
-                # #endregion
                 continue
             raise
 
@@ -301,39 +196,6 @@ async def delete_master(id: str, _: int = Depends(get_current_admin)):
 async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает мастера вверх или вниз по порядку"""
     try:
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H1",
-                "location": "admin.py:160",
-                "message": "Move master entry",
-                "data": {"id": id, "direction": direction},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H1",
-                "location": "admin.py:178",
-                "message": "Move master entry (stdout-only)",
-                "data": {"id": id, "direction": direction},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         # Получаем текущий элемент
         current_res = await supabase.table("masters").select("*").eq("id", id).single().execute()
         current_order = current_res.data.get("order")
@@ -367,50 +229,6 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             all_res = await supabase.table("masters").select("*").execute()
             all_items = all_res.data or []
             valid_items = [item for item in all_items if item.get("order") is not None]
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H2",
-                "location": "admin.py:196",
-                "message": "Move master normalize",
-                "data": {
-                    "normalized": normalized_orders,
-                    "unique_orders": unique_orders,
-                    "total_items": len(all_items),
-                    "current_order": current_order
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H2",
-                "location": "admin.py:236",
-                "message": "Move master normalize (stdout-only)",
-                "data": {
-                    "normalized": normalized_orders,
-                    "unique_orders": unique_orders,
-                    "total_items": len(all_items),
-                    "current_order": current_order
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже в списке = увеличить свой order = найти соседа с БОЛЬШИМ order
@@ -434,47 +252,6 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             else:
                 target_res = type('obj', (object,), {'data': []})()
         
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H3",
-                "location": "admin.py:220",
-                "message": "Move master candidates",
-                "data": {
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H3",
-                "location": "admin.py:282",
-                "message": "Move master candidates (stdout-only)",
-                "data": {
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         if not target_res.data:
             return {"status": "ok", "message": "Already at edge"}
         
@@ -554,39 +331,6 @@ async def delete_service(id: str, _: int = Depends(get_current_admin)):
 async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает услугу вверх или вниз по порядку"""
     try:
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H1",
-                "location": "admin.py:320",
-                "message": "Move service entry",
-                "data": {"id": id, "direction": direction},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H1",
-                "location": "admin.py:377",
-                "message": "Move service entry (stdout-only)",
-                "data": {"id": id, "direction": direction},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
         if not current_res.data:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -621,50 +365,6 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             all_res = await supabase.table("services").select("*").execute()
             all_items = all_res.data or []
             valid_items = [item for item in all_items if item.get("order") is not None]
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H2",
-                "location": "admin.py:352",
-                "message": "Move service normalize",
-                "data": {
-                    "normalized": normalized_orders,
-                    "unique_orders": unique_orders,
-                    "total_items": len(all_items),
-                    "current_order": current_order
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H2",
-                "location": "admin.py:435",
-                "message": "Move service normalize (stdout-only)",
-                "data": {
-                    "normalized": normalized_orders,
-                    "unique_orders": unique_orders,
-                    "total_items": len(all_items),
-                    "current_order": current_order
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
         candidates = []
@@ -683,47 +383,6 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             else:
                 target_res = type('obj', (object,), {'data': []})()
         
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run2",
-                "hypothesisId": "H3",
-                "location": "admin.py:370",
-                "message": "Move service candidates",
-                "data": {
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run3",
-                "hypothesisId": "H3",
-                "location": "admin.py:454",
-                "message": "Move service candidates (stdout-only)",
-                "data": {
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         if not target_res.data:
             return {"status": "ok", "message": "Already at edge"}
         
@@ -915,30 +574,47 @@ async def get_user_transactions(user_id: str, _: int = Depends(get_current_admin
 async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     """Создает транзакцию и обновляет баланс пользователя"""
     try:
-        # Получаем текущий баланс пользователя
-        user_res = await supabase.table("users").select("balance").eq("id", user_id).single().execute()
+        # Проверяем пользователя
+        user_res = await supabase.table("users").select("id").eq("id", user_id).single().execute()
         if not user_res.data:
             raise HTTPException(status_code=404, detail="User not found")
         
-        current_balance = user_res.data["balance"]
-        amount = data.get("amount", 0)
-        new_balance = current_balance + amount
+        try:
+            amount = int(data.get("amount", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid amount")
         
-        # Создаем транзакцию
-        transaction_data = {
-            "user_id": user_id,
-            "amount": amount,
-            "transaction_type": "earn" if amount > 0 else "spend",
-            "description": data.get("description", "Ручное изменение баланса"),
-            "visit_id": None
-        }
+        if amount == 0:
+            raise HTTPException(status_code=400, detail="Amount cannot be zero")
         
-        res = await supabase.table("loyalty_transactions").insert(transaction_data).execute()
+        description = data.get("description", "Ручное изменение баланса")
         
-        # Обновляем баланс пользователя
-        await supabase.table("users").update({"balance": new_balance}).eq("id", user_id).execute()
+        # Для списаний проверяем доступный баланс
+        if amount < 0:
+            available_res = await supabase.rpc("get_user_available_balance", {
+                "p_user_id": int(user_id)
+            }).execute()
+            available_balance = int(available_res.data or 0)
+            if abs(amount) > available_balance:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недостаточно баллов. Доступно: {available_balance}"
+                )
         
-        return res.data[0] if res.data else {}
+        expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
+        
+        result = await supabase.rpc("adjust_loyalty_balance", {
+            "p_user_id": int(user_id),
+            "p_amount": amount,
+            "p_description": description,
+            "p_expiration_days": expiration_days
+        }).execute()
+        
+        new_balance = None
+        if result and isinstance(result.data, dict):
+            new_balance = result.data.get("new_balance")
+        
+        return {"success": True, "new_balance": new_balance}
     except HTTPException:
         raise
     except Exception as e:
@@ -989,55 +665,9 @@ async def process_broadcast(broadcast_id: str):
             return
         
         broadcast = broadcast_res.data or {}
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run7",
-                "hypothesisId": "D1",
-                "location": "admin.py:928",
-                "message": "Process broadcast keys",
-                "data": {"keys": sorted(list(broadcast.keys()))},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         message = broadcast.get("message") or broadcast.get("content") or broadcast.get("title") or ""
         recipient_type = broadcast.get("recipient_type", "all")
         image_url = broadcast.get("image_url")
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run7",
-                "hypothesisId": "D1",
-                "location": "admin.py:943",
-                "message": "Process broadcast resolved fields",
-                "data": {
-                    "message_len": len(message) if isinstance(message, str) else 0,
-                    "recipient_type": recipient_type,
-                    "has_image": bool(image_url)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
 
         # Обновляем статус на "sending"
         try:
@@ -1170,31 +800,6 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
         if image_url is not None:
             broadcast_data["image_url"] = image_url
         
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run4",
-                "hypothesisId": "B1",
-                "location": "admin.py:965",
-                "message": "Broadcast insert start",
-                "data": {
-                    "keys": sorted(list(broadcast_data.keys())),
-                    "has_image": "image_url" in broadcast_data
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-
         def _extract_missing_column(error_str: str) -> Optional[str]:
             match = re.search(r"Could not find the '([^']+)' column", error_str)
             return match.group(1) if match else None
@@ -1205,27 +810,6 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
             try:
                 res = await supabase.table("broadcasts").insert(pending_data).execute()
                 # НЕ запускаем отправку автоматически - пользователь должен нажать "Отправить" или дождаться scheduled_at
-                # #region agent log
-                try:
-                    payload = {
-                        "sessionId": "debug-session",
-                        "runId": "run4",
-                        "hypothesisId": "B1",
-                        "location": "admin.py:998",
-                        "message": "Broadcast insert success",
-                        "data": {"keys": sorted(list(pending_data.keys()))},
-                        "timestamp": int(datetime.now().timestamp() * 1000)
-                    }
-                    try:
-                        with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                            json.dump(payload, f, ensure_ascii=False)
-                            f.write('\n')
-                    except Exception:
-                        pass
-                    print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-                except Exception:
-                    pass
-                # #endregion
                 return res.data[0] if res.data else {}
             except Exception as insert_error:
                 last_error = insert_error
@@ -1247,27 +831,6 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
                 missing_col = _extract_missing_column(error_text or error_str)
                 if missing_col and missing_col in pending_data:
                     pending_data.pop(missing_col, None)
-                    # #region agent log
-                    try:
-                        payload = {
-                            "sessionId": "debug-session",
-                            "runId": "run4",
-                            "hypothesisId": "B1",
-                            "location": "admin.py:1016",
-                            "message": "Broadcast missing column removed",
-                            "data": {"missing_col": missing_col, "keys": sorted(list(pending_data.keys()))},
-                            "timestamp": int(datetime.now().timestamp() * 1000)
-                        }
-                        try:
-                            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                                json.dump(payload, f, ensure_ascii=False)
-                                f.write('\n')
-                        except Exception:
-                            pass
-                        print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-                    except Exception:
-                        pass
-                    # #endregion
                     continue
                 raise
         if last_error:
@@ -1296,27 +859,6 @@ async def get_broadcasts(_: int = Depends(get_current_admin)):
 async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
     """Получает информацию о рассылке"""
     try:
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run5",
-                "hypothesisId": "C1",
-                "location": "admin.py:1005",
-                "message": "Get broadcast entry",
-                "data": {"id": id},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         res = await supabase.table("broadcasts").select("*").eq("id", id).single().execute()
         data = res.data if res.data else {}
         if isinstance(data, dict) and not data.get("message"):
@@ -1330,54 +872,12 @@ async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
 async def send_broadcast(id: str, background_tasks: BackgroundTasks, _: int = Depends(get_current_admin)):
     """Запускает отправку рассылки"""
     try:
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run5",
-                "hypothesisId": "C1",
-                "location": "admin.py:1036",
-                "message": "Send broadcast entry",
-                "data": {"id": id},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         # Проверяем, что рассылка существует
         res = await supabase.table("broadcasts").select("*").eq("id", id).single().execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Broadcast not found")
         
         broadcast = res.data
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run5",
-                "hypothesisId": "C1",
-                "location": "admin.py:1049",
-                "message": "Send broadcast found",
-                "data": {"status": broadcast.get("status")},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         
         if broadcast["status"] not in ["pending", "failed", "scheduled"]:
             raise HTTPException(status_code=400, detail=f"Broadcast is already {broadcast['status']}")

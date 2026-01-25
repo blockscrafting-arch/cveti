@@ -9,7 +9,6 @@ import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
-LOG_PATH = r"d:\\vladexecute\\proj\\CVETI\\.cursor\\debug.log"
 
 # Кэш настроек (обновляется каждые 5 минут)
 _settings_cache: Dict[str, Any] = {}
@@ -79,32 +78,6 @@ async def update_setting(key: str, value: Any, setting_type: str = "string", upd
         True если успешно, False при ошибке
     """
     try:
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run4",
-                "hypothesisId": "B2",
-                "location": "settings.py:79",
-                "message": "Update setting entry",
-                "data": {
-                    "key": key,
-                    "setting_type": setting_type,
-                    "value_type": type(value).__name__,
-                    "has_updated_by": bool(updated_by)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
         # Преобразуем значение в строку для хранения
         value_str = str(value)
         
@@ -147,28 +120,6 @@ async def update_setting(key: str, value: Any, setting_type: str = "string", upd
                 }).execute()
             else:
                 raise
-        # #region agent log
-        try:
-            payload = {
-                "sessionId": "debug-session",
-                "runId": "run4",
-                "hypothesisId": "B2",
-                "location": "settings.py:110",
-                "message": "Update setting rpc variant",
-                "data": {"rpc_variant": rpc_variant},
-                "timestamp": int(datetime.now().timestamp() * 1000)
-            }
-            try:
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\\n')
-            except Exception:
-                pass
-            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
-        except Exception:
-            pass
-        # #endregion
-        
         # Очищаем кэш для этой настройки
         if key in _settings_cache:
             del _settings_cache[key]

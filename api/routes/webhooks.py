@@ -60,26 +60,11 @@ async def handle_payment_webhook(payload: YClientsWebhookData):
             # Продолжаем обработку даже если логирование не удалось
         
         # 2. Обрабатываем лояльность
-        tg_id, points = await process_loyalty_payment(client_phone, amount, visit_id)
+        tg_id, result = await process_loyalty_payment(client_phone, amount, visit_id)
         
-        if tg_id and points:
-            # Отправляем уведомление в Телеграм
-            if _notification_bot:
-                await send_loyalty_notification(_notification_bot, tg_id, points)
-            else:
-                logger.warning("Notification bot not set, skipping notification")
-            
-            try:
-                await supabase.table("webhook_log").update({
-                    "status": "processed"
-                }).eq("webhook_id", webhook_id).execute()
-            except Exception as e:
-                logger.error(f"Error updating webhook log: {e}")
-            
-            logger.info(f"Processed points for {client_phone}: +{points}")
-        else:
-            # points содержит сообщение об ошибке
-            error_msg = points if isinstance(points, str) else "Unknown error"
+        if isinstance(result, str) or result is None:
+            # result содержит сообщение об ошибке
+            error_msg = result if isinstance(result, str) else "Unknown error"
             try:
                 await supabase.table("webhook_log").update({
                     "status": "failed",
@@ -89,6 +74,26 @@ async def handle_payment_webhook(payload: YClientsWebhookData):
                 logger.error(f"Error updating webhook log: {e}")
             
             logger.warning(f"Failed to process webhook {webhook_id}: {error_msg}")
+        else:
+            points = int(result)
+            # Отправляем уведомление в Телеграм только при начислении
+            if tg_id and points > 0:
+                if _notification_bot:
+                    await send_loyalty_notification(_notification_bot, tg_id, points)
+                else:
+                    logger.warning("Notification bot not set, skipping notification")
+            
+            try:
+                await supabase.table("webhook_log").update({
+                    "status": "processed"
+                }).eq("webhook_id", webhook_id).execute()
+            except Exception as e:
+                logger.error(f"Error updating webhook log: {e}")
+            
+            if points > 0:
+                logger.info(f"Processed points for {client_phone}: +{points}")
+            else:
+                logger.info(f"Webhook processed for {client_phone}: no balance change")
             
     except Exception as e:
         logger.error(f"Error processing webhook {webhook_id}: {e}", exc_info=True)
