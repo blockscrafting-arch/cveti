@@ -839,7 +839,7 @@ async def check_scheduled_broadcasts():
     except Exception as e:
         logger.error(f"Error checking scheduled broadcasts: {e}", exc_info=True)
 
-async def process_broadcast(broadcast_id: int):
+async def process_broadcast(broadcast_id: str):
     """Фоновая задача для отправки рассылки"""
     try:
         # Получаем данные рассылки
@@ -1098,9 +1098,30 @@ async def get_broadcasts(_: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/broadcasts/{id}")
-async def get_broadcast(id: int, _: int = Depends(get_current_admin)):
+async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
     """Получает информацию о рассылке"""
     try:
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run5",
+                "hypothesisId": "C1",
+                "location": "admin.py:1005",
+                "message": "Get broadcast entry",
+                "data": {"id": id},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         res = await supabase.table("broadcasts").select("*").eq("id", id).single().execute()
         return res.data if res.data else {}
     except Exception as e:
@@ -1108,15 +1129,57 @@ async def get_broadcast(id: int, _: int = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.post("/broadcasts/{id}/send")
-async def send_broadcast(id: int, background_tasks: BackgroundTasks, _: int = Depends(get_current_admin)):
+async def send_broadcast(id: str, background_tasks: BackgroundTasks, _: int = Depends(get_current_admin)):
     """Запускает отправку рассылки"""
     try:
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run5",
+                "hypothesisId": "C1",
+                "location": "admin.py:1036",
+                "message": "Send broadcast entry",
+                "data": {"id": id},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         # Проверяем, что рассылка существует
         res = await supabase.table("broadcasts").select("*").eq("id", id).single().execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Broadcast not found")
         
         broadcast = res.data
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run5",
+                "hypothesisId": "C1",
+                "location": "admin.py:1049",
+                "message": "Send broadcast found",
+                "data": {"status": broadcast.get("status")},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         
         if broadcast["status"] not in ["pending", "failed", "scheduled"]:
             raise HTTPException(status_code=400, detail=f"Broadcast is already {broadcast['status']}")
@@ -1140,7 +1203,7 @@ async def send_broadcast(id: int, background_tasks: BackgroundTasks, _: int = De
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/broadcasts/{id}")
-async def delete_broadcast(id: int, _: int = Depends(get_current_admin)):
+async def delete_broadcast(id: str, _: int = Depends(get_current_admin)):
     """Удаляет рассылку"""
     try:
         # Проверяем, что рассылка существует
