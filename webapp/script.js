@@ -1078,6 +1078,25 @@ function renderBotButtonsPanel() {
 
     botButtonsState.rows = buildBotButtonsRows(adminItems, botButtonsState.extraRows);
 
+    // #region agent log
+    try {
+        sendClientLog({
+            sessionId: 'debug-session',
+            runId: 'run10',
+            hypothesisId: 'H6',
+            location: 'script.js:1079',
+            message: 'renderBotButtonsPanel state',
+            data: {
+                rowsCount: botButtonsState.rows.length,
+                itemsCount: Array.isArray(adminItems) ? adminItems.length : null,
+                extraRows: botButtonsState.extraRows.length,
+                selectedId: botButtonsState.selectedId || null
+            },
+            timestamp: Date.now()
+        });
+    } catch (e) {}
+    // #endregion
+
     if (botButtonsState.pendingSelectId) {
         const exists = adminItems.some(item => String(item.id) === String(botButtonsState.pendingSelectId));
         botButtonsState.selectedId = exists ? botButtonsState.pendingSelectId : null;
@@ -2182,6 +2201,55 @@ function renderFormFields(item = {}) {
     
     // Добавляем обработчики для загрузки файлов
     setupImageUploadHandlers();
+
+    // #region agent log
+    try {
+        if (currentAdminTab === 'broadcasts') {
+            const messageEl = fieldsEl.querySelector('textarea[name="message"]');
+            if (!messageEl) {
+                sendClientLog({
+                    sessionId: 'debug-session',
+                    runId: 'run10',
+                    hypothesisId: 'H4',
+                    location: 'script.js:2060',
+                    message: 'broadcast message textarea missing',
+                    data: {},
+                    timestamp: Date.now()
+                });
+            } else {
+                messageEl.addEventListener('focus', () => {
+                    if (messageEl.dataset.logFocus) return;
+                    messageEl.dataset.logFocus = '1';
+                    sendClientLog({
+                        sessionId: 'debug-session',
+                        runId: 'run10',
+                        hypothesisId: 'H4',
+                        location: 'script.js:2068',
+                        message: 'broadcast message focus',
+                        data: {
+                            disabled: !!messageEl.disabled,
+                            readOnly: !!messageEl.readOnly
+                        },
+                        timestamp: Date.now()
+                    });
+                });
+                messageEl.addEventListener('input', () => {
+                    if (messageEl.dataset.logInput) return;
+                    messageEl.dataset.logInput = '1';
+                    sendClientLog({
+                        sessionId: 'debug-session',
+                        runId: 'run10',
+                        hypothesisId: 'H5',
+                        location: 'script.js:2079',
+                        message: 'broadcast message input',
+                        data: { length: messageEl.value.length },
+                        timestamp: Date.now()
+                    });
+                });
+            }
+        }
+    } catch (e) {}
+    // #endregion
     
     // Показываем/скрываем фильтры по балансу и выбор пользователей
     if (currentAdminTab === 'broadcasts') {
