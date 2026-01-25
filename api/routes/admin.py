@@ -1040,7 +1040,10 @@ async def process_broadcast(broadcast_id: str):
         # #endregion
 
         # Обновляем статус на "sending"
-        await _safe_broadcast_update(str(broadcast_id), {"status": "sending"})
+        try:
+            await _safe_broadcast_update(str(broadcast_id), {"status": "sending"})
+        except Exception as e:
+            logger.warning(f"Could not set broadcast {broadcast_id} status to 'sending': {e}")
         
         # Получаем список получателей
         recipients = []
@@ -1278,7 +1281,13 @@ async def get_broadcasts(_: int = Depends(get_current_admin)):
     """Получает список всех рассылок"""
     try:
         res = await supabase.table("broadcasts").select("*").order("created_at", desc=True).limit(50).execute()
-        return res.data if res.data else []
+        items = res.data if res.data else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if not item.get("message"):
+                item["message"] = item.get("content") or item.get("title") or ""
+        return items
     except Exception as e:
         logger.error(f"Error in get_broadcasts: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -1309,7 +1318,10 @@ async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
             pass
         # #endregion
         res = await supabase.table("broadcasts").select("*").eq("id", id).single().execute()
-        return res.data if res.data else {}
+        data = res.data if res.data else {}
+        if isinstance(data, dict) and not data.get("message"):
+            data["message"] = data.get("content") or data.get("title") or ""
+        return data
     except Exception as e:
         logger.error(f"Error in get_broadcast: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
