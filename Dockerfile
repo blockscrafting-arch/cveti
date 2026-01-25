@@ -21,6 +21,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем код проекта
 COPY . .
 
+# Создаем непривилегированного пользователя
+RUN adduser --disabled-password --gecos "" appuser \
+    && chown -R appuser:appuser /app
+
+# Запускаем от непривилегированного пользователя
+USER appuser
+
 # Открываем порт
 EXPOSE 8000
 

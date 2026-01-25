@@ -153,16 +153,6 @@ async def health():
         "version": "1.0.0"
     }
 
-@app.get("/debug/webapp")
-async def debug_webapp():
-    """Диагностический endpoint для проверки webapp"""
-    return {
-        "webapp_path": webapp_path,
-        "webapp_exists": os.path.exists(webapp_path),
-        "index_exists": os.path.exists(os.path.join(webapp_path, "index.html")) if webapp_path else False,
-        "files": os.listdir(webapp_path) if os.path.exists(webapp_path) else []
-    }
-
 # Глобальный Bot экземпляр для рассылок и уведомлений
 _broadcast_bot: Bot = None
 

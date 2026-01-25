@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Header
 from api.models.yclients import YClientsWebhookData
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import process_loyalty_payment
@@ -104,12 +104,12 @@ async def handle_payment_webhook(payload: YClientsWebhookData):
 async def yclients_webhook(
     payload: YClientsWebhookData, 
     background_tasks: BackgroundTasks,
-    secret_token: str = Query(None)
+    secret_token: str = Header(None, alias="X-Webhook-Secret")
 ):
     """Принимает вебхук и запускает обработку в фоне"""
     # Проверка безопасности
     if secret_token != settings.WEBHOOK_SECRET:
-        logger.warning(f"Unauthorized webhook attempt with token: {secret_token}")
+        logger.warning("Unauthorized webhook attempt")
         raise HTTPException(status_code=403, detail="Invalid secret token")
     
     # Базовая валидация структуры
@@ -125,9 +125,14 @@ async def yclients_webhook(
 @router.post("/yclients/callback")
 async def yclients_callback(
     payload: dict,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    secret_token: str = Header(None, alias="X-Webhook-Secret")
 ):
     """Обрабатывает уведомления об отключении интеграции от YCLIENTS"""
+    if secret_token != settings.WEBHOOK_SECRET:
+        logger.warning("Unauthorized webhook callback attempt")
+        raise HTTPException(status_code=403, detail="Invalid secret token")
+
     logger.info(f"YClients callback received: {payload}")
     
     # Логируем событие отключения
@@ -171,4 +176,4 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         logger.error(f"Error processing Telegram webhook: {e}", exc_info=True)
         # Telegram ожидает {"ok": true} даже при ошибках, иначе будет повторять запрос
-        return {"ok": False, "error": str(e)}
+        return {"ok": False}

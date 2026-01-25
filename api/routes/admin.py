@@ -7,15 +7,10 @@ from bot.config import settings
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
 import logging
-import json
-import os
 from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
-log_path = LOG_PATH
-
 def _coerce_order(value):
     try:
         return int(value)
@@ -184,33 +179,7 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         all_res = await supabase.table("masters").select("*").execute()
         all_items = all_res.data or []
         valid_items = [item for item in all_items if item.get("order") is not None]
-        # #region agent log
-        try:
-            payload = {
-                "location": "admin.py:166",
-                "message": "Move master candidates",
-                "data": {
-                    "id": id,
-                    "direction": direction,
-                    "current_order": current_order,
-                    "total_items": len(all_res.data) if all_res.data else 0,
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "B"
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-            logger.info(debug_line)
-            print(debug_line)
-        except Exception:
-            pass
-        # #endregion
-        
+
         orders = [_coerce_order(item.get("order")) for item in all_items]
         unique_orders = len(set([o for o in orders if o is not None]))
         if len(all_items) > 1 and unique_orders <= 1:
@@ -234,37 +203,6 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
                 target_res = type('obj', (object,), {'data': [target]})()
             else:
                 target_res = type('obj', (object,), {'data': []})()
-        # #region agent log
-        try:
-            orders = [item.get("order") for item in valid_items]
-            unique_orders = len(set(orders)) if orders else 0
-            payload = {
-                "location": "admin.py:214",
-                "message": "Move master candidate stats",
-                "data": {
-                    "id": id,
-                    "direction": direction,
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "unique_orders": unique_orders,
-                    "min_order": min(orders) if orders else None,
-                    "max_order": max(orders) if orders else None,
-                    "same_order_all": unique_orders == 1 if orders else False
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "D"
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-            logger.info(debug_line)
-            print(debug_line)
-        except Exception:
-            pass
-        # #endregion
         else:  # down
             # Ищем соседа снизу (order больше текущего)
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") > current_order]
@@ -291,32 +229,8 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         await supabase.table("masters").update({"order": current_order}).eq("id", target["id"]).execute()
         
         # Проверяем, что данные действительно обновились
-        verify_res = await supabase.table("masters").select("id,order").in_("id", [id, target["id"]]).execute()
-        # #region agent log
-        try:
-            payload = {
-                "location": "admin.py:210",
-                "message": "Move master verify",
-                "data": {
-                    "id": id,
-                    "target_id": target.get("id"),
-                    "verify_data": verify_res.data
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "C"
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-            logger.info(debug_line)
-            print(debug_line)
-        except Exception:
-            pass
-        # #endregion
-        
+        await supabase.table("masters").select("id,order").in_("id", [id, target["id"]]).execute()
+
         return {"status": "ok"}
     except HTTPException:
         raise
@@ -400,33 +314,7 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         all_res = await supabase.table("services").select("*").execute()
         all_items = all_res.data or []
         valid_items = [item for item in all_items if item.get("order") is not None]
-        # #region agent log
-        try:
-            payload = {
-                "location": "admin.py:294",
-                "message": "Move service candidates",
-                "data": {
-                    "id": id,
-                    "direction": direction,
-                    "current_order": current_order,
-                    "total_items": len(all_res.data) if all_res.data else 0,
-                    "valid_count": len(valid_items)
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "B"
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-            logger.info(debug_line)
-            print(debug_line)
-        except Exception:
-            pass
-        # #endregion
-        
+
         orders = [_coerce_order(item.get("order")) for item in all_items]
         unique_orders = len(set([o for o in orders if o is not None]))
         if len(all_items) > 1 and unique_orders <= 1:
@@ -447,37 +335,6 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
                 target_res = type('obj', (object,), {'data': [target]})()
             else:
                 target_res = type('obj', (object,), {'data': []})()
-        # #region agent log
-        try:
-            orders = [item.get("order") for item in valid_items]
-            unique_orders = len(set(orders)) if orders else 0
-            payload = {
-                "location": "admin.py:342",
-                "message": "Move service candidate stats",
-                "data": {
-                    "id": id,
-                    "direction": direction,
-                    "current_order": current_order,
-                    "candidate_count": len(candidates),
-                    "unique_orders": unique_orders,
-                    "min_order": min(orders) if orders else None,
-                    "max_order": max(orders) if orders else None,
-                    "same_order_all": unique_orders == 1 if orders else False
-                },
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "D"
-            }
-            with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-            logger.info(debug_line)
-            print(debug_line)
-        except Exception:
-            pass
-        # #endregion
         else:
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") > current_order]
             if candidates:
@@ -585,30 +442,7 @@ async def move_promotion(id: str, direction: str = Query(..., pattern="^(up|down
         # Получаем все записи для поиска соседа
         all_res = await supabase.table("promotions").select("*").execute()
         valid_items = [item for item in all_res.data if item.get("order") is not None]
-        # #region agent log
-        try:
-            with open(log_path, 'a', encoding='utf-8') as f:
-                payload = {
-                    "location": "admin.py:505",
-                    "message": "Valid promotions found",
-                    "data": {
-                        "total_items": len(all_res.data) if all_res.data else 0,
-                        "valid_count": len(valid_items),
-                        "current_order": current_order
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "C"
-                }
-                json.dump(payload, f, ensure_ascii=False)
-                f.write('\n')
-                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-                logger.info(debug_line)
-                print(debug_line)
-        except: pass
-        # #endregion
-        
+
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
         if direction == "up":

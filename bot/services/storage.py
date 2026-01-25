@@ -2,16 +2,12 @@
 Сервис для работы с Supabase Storage через нативный клиент Supabase (вместо S3)
 """
 import logging
-import json
-from datetime import datetime
 import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
-
 class StorageService:
     """Сервис для загрузки файлов в Supabase Storage"""
     
@@ -61,34 +57,6 @@ class StorageService:
             Публичный URL загруженного файла или None при ошибке
         """
         try:
-            # #region agent log
-            try:
-                payload = {
-                    "location": "storage.py:55",
-                    "message": "Upload start",
-                    "data": {
-                        "filename": filename,
-                        "folder": folder,
-                        "byte_len": len(file_content) if file_content else 0,
-                        "bucket": self.bucket,
-                        "supabase_type": type(supabase).__name__,
-                        "has_storage_attr": hasattr(supabase, "storage"),
-                        "s3_configured": bool(self.s3_endpoint and self.s3_access_key and self.s3_secret_key)
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-                logger.info(debug_line)
-                print(debug_line)
-            except Exception:
-                pass
-            # #endregion
             file_path = self._generate_file_path(filename, folder)
             
             content_type = self._get_content_type(filename)
@@ -125,29 +93,6 @@ class StorageService:
                     raise upload_error
 
             public_url = self._get_public_url(file_path)
-            # #region agent log
-            try:
-                payload = {
-                    "location": "storage.py:83",
-                    "message": "Upload finished",
-                    "data": {
-                        "file_path": file_path,
-                        "public_url_set": bool(public_url)
-                    },
-                    "timestamp": int(datetime.now().timestamp() * 1000),
-                    "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "A"
-                }
-                with open(LOG_PATH, 'a', encoding='utf-8') as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    f.write('\n')
-                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
-                logger.info(debug_line)
-                print(debug_line)
-            except Exception:
-                pass
-            # #endregion
             logger.info(f"File uploaded successfully: {file_path}")
             return public_url
                 

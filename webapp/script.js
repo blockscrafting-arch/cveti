@@ -22,6 +22,61 @@ if (!window.Telegram?.WebApp) {
 // Объявляем tg один раз после проверки/создания
 const tg = window.Telegram?.WebApp || {};
 
+const HTML_ESCAPE_MAP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+};
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char]);
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
+}
+
+function safeUrl(value, allowRelative = true) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw, window.location.origin);
+        const protocol = parsed.protocol.toLowerCase();
+        if (protocol === 'http:' || protocol === 'https:') {
+            return parsed.href;
+        }
+    } catch (error) {
+        // ignore invalid URL
+    }
+    if (allowRelative && (raw.startsWith('/') || raw.startsWith('./') || raw.startsWith('../'))) {
+        return raw;
+    }
+    return '';
+}
+
+function encodeId(value) {
+    try {
+        return encodeURIComponent(String(value ?? ''));
+    } catch (error) {
+        return '';
+    }
+}
+
+function decodeId(value) {
+    try {
+        return decodeURIComponent(String(value ?? ''));
+    } catch (error) {
+        return String(value ?? '');
+    }
+}
+
+function safeNumber(value, fallback = 0) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+}
+
 // Инициализируем Telegram WebApp
 if (tg && tg.expand) {
     tg.expand();
@@ -169,9 +224,6 @@ function setupHorizontalScroll() {
 
 // Функция для скрытия лоадера (гарантированно вызывается)
 function hideLoader() {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:172',message:'hideLoader entry',data:{hasLoader:!!loader,hasMainContent:!!mainContent},timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     console.log("[DEBUG] Hiding loader");
     
     if (loader) {
@@ -191,9 +243,6 @@ function hideLoader() {
     }
 }
 
-// #region agent log
-fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:192',message:'window.onload entry',data:{hasTg:!!tg,hasLoader:!!loader,hasMainContent:!!mainContent},timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'A'})}).catch(()=>{});
-// #endregion
 window.onload = async () => {
     console.log("[DEBUG] Window onload started");
     
@@ -202,9 +251,6 @@ window.onload = async () => {
     const MIN_LOADER_TIME = 2000; // Минимум 2 секунды для анимации
     
     try {
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:203',message:'Starting init functions',timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         // Устанавливаем цвета хедера TG
         if (tg) {
             tg.setHeaderColor('#FFF8F9');
@@ -221,10 +267,6 @@ window.onload = async () => {
         // Инициализируем свайп для закрытия модалок
         initModalSwipe();
         
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:220',message:'Functions initialized, starting promises',timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-
         // Загружаем контент и профиль НЕЗАВИСИМО
         // Если один упадет, другой все равно загрузится
         const loadPromises = [];
@@ -265,31 +307,19 @@ window.onload = async () => {
         // Ждем завершения всех загрузок (даже с ошибками)
         await Promise.allSettled(loadPromises);
         
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:260',message:'Promises settled',timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         console.log("[DEBUG] All loads completed");
         
         
     } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:267',message:'Error in window.onload',data:{error:error.message,stack:error.stack},timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         console.error("[DEBUG] Init Error:", error);
         
         // Все равно показываем интерфейс
     } finally {
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:274',message:'Finally block reached',timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         // Гарантируем минимум 2 секунды отображения лоадера для анимации
         const elapsedTime = Date.now() - loadStartTime;
         const remainingTime = Math.max(0, MIN_LOADER_TIME - elapsedTime);
         
         setTimeout(() => {
-            // #region agent log
-            fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:282',message:'Calling hideLoader',data:{remainingTime},timestamp:Date.now(),sessionId:'debug-loader',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             hideLoader();
         }, remainingTime);
     }
@@ -335,7 +365,10 @@ async function apiFetch(endpoint) {
 async function loadContent() {
     console.log("[DEBUG] Loading content...");
     const data = await apiFetch('/api/app/content');
-    if (data.booking_url) bookingUrl = data.booking_url;
+    if (data.booking_url) {
+        const safeBookingUrl = safeUrl(data.booking_url);
+        if (safeBookingUrl) bookingUrl = safeBookingUrl;
+    }
     
     renderPromotions(data.promotions || []);
     renderServices(data.services || []);
@@ -359,6 +392,11 @@ async function loadProfile() {
     document.getElementById('user-name').innerText = `Привет, ${user.name || 'Красотка'}!`;
     document.getElementById('user-balance').innerText = user.balance || 0;
     document.getElementById('profile-phone').innerText = user.phone || '-';
+    const levelEl = document.getElementById('profile-level');
+    if (levelEl) {
+        const levelText = user.level ? String(user.level).toUpperCase() : 'NEW';
+        levelEl.innerText = levelText;
+    }
     
     // Показываем кнопку админки, если пользователь админ
     const adminEntry = document.getElementById('admin-entry');
@@ -367,7 +405,7 @@ async function loadProfile() {
     }
 
     // Стилизация бейджа статуса
-    if (user.level === 'vip') {
+    if (levelEl && user.level === 'vip') {
         levelEl.className = "inline-flex px-3 py-1 rounded-full bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 text-xs font-bold uppercase tracking-wide border border-yellow-300";
     }
 
@@ -387,10 +425,15 @@ function renderPromotions(promos) {
         return;
     }
     
-    list.innerHTML = promos.map(p => `
+    list.innerHTML = promos.map(p => {
+        const imageUrl = safeUrl(p.image_url);
+        const title = escapeHtml(p.title);
+        const description = escapeHtml(p.description);
+        const promotionId = safeNumber(p.id, 0);
+        return `
         <div class="min-w-[300px] h-[200px] relative rounded-[28px] overflow-hidden shadow-card active:scale-[0.98] transition-transform snap-center group border border-white/40">
-            ${p.image_url ? `
-                <img src="${p.image_url}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy">
+            ${imageUrl ? `
+                <img src="${escapeAttr(imageUrl)}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" alt="${title}">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
             ` : `
                 <div class="absolute inset-0 bg-gradient-to-br from-[#E8A8B4] via-[#F5CED6] to-[#FCE4EC]"></div>
@@ -399,15 +442,16 @@ function renderPromotions(promos) {
             `}
             <div class="relative h-full flex flex-col justify-between p-6 z-10">
                 <div>
-                    <h3 class="text-white font-serif text-2xl font-bold leading-tight mb-2 drop-shadow-md">${p.title}</h3>
-                    ${p.description ? `<p class="text-white/90 text-sm leading-relaxed line-clamp-2 drop-shadow-sm font-medium">${p.description}</p>` : ''}
+                    <h3 class="text-white font-serif text-2xl font-bold leading-tight mb-2 drop-shadow-md">${title}</h3>
+                    ${description ? `<p class="text-white/90 text-sm leading-relaxed line-clamp-2 drop-shadow-sm font-medium">${description}</p>` : ''}
                 </div>
-                <button onclick="openPromotionDetail(${p.id})" class="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-5 py-2.5 rounded-full text-xs font-bold w-fit transition-all flex items-center gap-2 shadow-sm border border-white/30">
+                <button onclick="openPromotionDetail(${promotionId})" class="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-5 py-2.5 rounded-full text-xs font-bold w-fit transition-all flex items-center gap-2 shadow-sm border border-white/30">
                     <span>Узнать больше</span>
                 </button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function renderServices(services) {
@@ -419,12 +463,17 @@ function renderServices(services) {
         return;
     }
     
-    list.innerHTML = services.map(s => `
+    list.innerHTML = services.map(s => {
+        const imageUrl = safeUrl(s.image_url);
+        const title = escapeHtml(s.title);
+        const description = escapeHtml(s.description);
+        const price = safeNumber(s.price, 0);
+        return `
         <div onclick="openBooking()" class="bg-white rounded-[28px] shadow-card border border-white/50 active:scale-[0.98] transition-transform min-h-[280px] flex flex-col group relative overflow-hidden">
             <!-- Изображение услуги -->
-            ${s.image_url ? `
+            ${imageUrl ? `
                 <div class="h-[140px] w-full bg-stone-100 relative overflow-hidden flex-shrink-0">
-                    <img src="${s.image_url}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy">
+                    <img src="${escapeAttr(imageUrl)}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" alt="${title}">
                     <div class="absolute inset-0 bg-gradient-to-t from-white/10 to-transparent"></div>
                 </div>
             ` : `
@@ -437,12 +486,12 @@ function renderServices(services) {
                 <div class="absolute inset-0 bg-gradient-to-br from-white via-white to-stone-50 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
                 
                 <div class="mb-3 flex-shrink-0">
-                    <h3 class="font-serif text-lg font-bold leading-tight text-stone-800 group-hover:text-brand-dark transition-colors line-clamp-2">${s.title}</h3>
-                    ${s.description ? `<p class="text-xs text-stone-500 leading-relaxed mt-1.5 line-clamp-3">${s.description}</p>` : ''}
+                    <h3 class="font-serif text-lg font-bold leading-tight text-stone-800 group-hover:text-brand-dark transition-colors line-clamp-2">${title}</h3>
+                    ${description ? `<p class="text-xs text-stone-500 leading-relaxed mt-1.5 line-clamp-3">${description}</p>` : ''}
                 </div>
 
                 <div class="pt-3 border-t border-stone-100 flex items-center justify-between mt-auto flex-shrink-0">
-                    <span class="text-brand-dark font-bold text-lg font-serif">${s.price} ₽</span>
+                    <span class="text-brand-dark font-bold text-lg font-serif">${price} ₽</span>
                     <div class="w-8 h-8 rounded-full bg-brand-bg flex items-center justify-center text-brand-dark group-hover:scale-110 group-hover:bg-brand-primary group-hover:text-white transition-all shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -451,7 +500,8 @@ function renderServices(services) {
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function renderMasters(masters) {
@@ -463,12 +513,16 @@ function renderMasters(masters) {
         return;
     }
     
-    list.innerHTML = masters.map((m, index) => `
+    list.innerHTML = masters.map((m, index) => {
+        const photoUrl = safeUrl(m.photo_url);
+        const name = escapeHtml(m.name);
+        const specialization = escapeHtml(m.specialization || 'Специалист');
+        return `
         <div onclick="openBooking()" class="min-w-[260px] h-[380px] relative rounded-[32px] overflow-visible shadow-card active:scale-[0.98] transition-all duration-300 snap-center group cursor-pointer">
             <!-- Фото мастера с ореолом -->
             <div class="absolute inset-0 bg-stone-200 rounded-[32px] overflow-hidden" style="box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8), 0 15px 35px -10px rgba(232, 168, 180, 0.5), 0 10px 20px -5px rgba(0, 0, 0, 0.1);">
-                ${m.photo_url ? `
-                    <img src="${m.photo_url}" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" loading="lazy">
+                ${photoUrl ? `
+                    <img src="${escapeAttr(photoUrl)}" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" loading="lazy" alt="${name}">
                     <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-90 group-hover:opacity-80 transition-opacity duration-500"></div>
                 ` : `
                     <div class="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-brand-light/30 via-brand-bg to-brand-primary/20">
@@ -480,8 +534,8 @@ function renderMasters(masters) {
             
             <!-- Инфо мастера -->
             <div class="absolute bottom-0 left-0 right-0 p-8 text-white z-20">
-                <h4 class="font-serif text-2xl font-bold mb-1 leading-tight drop-shadow-lg">${m.name}</h4>
-                <p class="text-sm opacity-90 font-medium tracking-wide drop-shadow-md mb-4">${m.specialization || 'Специалист'}</p>
+                <h4 class="font-serif text-2xl font-bold mb-1 leading-tight drop-shadow-lg">${name}</h4>
+                <p class="text-sm opacity-90 font-medium tracking-wide drop-shadow-md mb-4">${specialization}</p>
                 
                 <!-- Кнопка записи -->
                 <button onclick="openBooking()" class="mt-4 w-full bg-white/20 backdrop-blur-md hover:bg-white/30 text-white px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg border border-white/30 active:scale-95">
@@ -492,7 +546,8 @@ function renderMasters(masters) {
                 </button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function renderHistory(history) {
@@ -512,11 +567,14 @@ function renderHistory(history) {
         const expiresAt = h.expires_at ? new Date(h.expires_at) : null;
         const isExpired = expiresAt && expiresAt < new Date();
         const daysLeft = expiresAt ? Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24)) : null;
+        const description = escapeHtml(h.description);
+        const amount = safeNumber(h.amount, 0);
+        const remainingAmount = Number.isFinite(Number(h.remaining_amount)) ? Number(h.remaining_amount) : null;
         
         return `
         <div class="flex justify-between items-center p-5 bg-white rounded-[28px] border border-white/50 shadow-card mb-3">
             <div class="flex-1">
-                <div class="text-sm font-semibold text-stone-800 mb-1">${h.description}</div>
+                <div class="text-sm font-semibold text-stone-800 mb-1">${description}</div>
                 <div class="text-xs text-stone-500 font-medium mb-1">${date.toLocaleDateString('ru-RU')}</div>
                 ${h.transaction_type === 'earn' && expiresAt ? `
                     <div class="text-xs ${isExpired ? 'text-rose-500' : daysLeft <= 7 ? 'text-orange-500' : 'text-stone-400'} font-medium">
@@ -525,11 +583,11 @@ function renderHistory(history) {
                 ` : ''}
             </div>
             <div class="text-right ml-4">
-                <div class="font-bold text-lg ${h.amount > 0 ? 'text-green-600' : 'text-stone-600'}">
-                    ${h.amount > 0 ? '+' : ''}${h.amount}
+                <div class="font-bold text-lg ${amount > 0 ? 'text-green-600' : 'text-stone-600'}">
+                    ${amount > 0 ? '+' : ''}${amount}
                 </div>
-                ${h.transaction_type === 'earn' && h.remaining_amount !== undefined ? `
-                    <div class="text-xs text-stone-400 mt-1">Остаток: ${h.remaining_amount}</div>
+                ${h.transaction_type === 'earn' && remainingAmount !== null ? `
+                    <div class="text-xs text-stone-400 mt-1">Остаток: ${remainingAmount}</div>
                 ` : ''}
             </div>
         </div>
@@ -539,10 +597,11 @@ function renderHistory(history) {
 
 function openBooking() {
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    const safeBookingUrl = safeUrl(bookingUrl) || 'https://yclients.com';
     if (tg?.openLink) {
-        tg.openLink(bookingUrl);
+        tg.openLink(safeBookingUrl);
     } else {
-        window.open(bookingUrl, '_blank');
+        window.open(safeBookingUrl, '_blank');
     }
 }
 
@@ -717,7 +776,7 @@ async function loadAdminData() {
         if (listEl) {
             listEl.innerHTML = `<div class="text-center py-10 text-rose-500">
                 <div class="font-semibold mb-2">Ошибка загрузки</div>
-                <div class="text-xs text-stone-400">${error.message || 'Неизвестная ошибка'}</div>
+                <div class="text-xs text-stone-400">${escapeHtml(error.message || 'Неизвестная ошибка')}</div>
             </div>`;
         }
     }
@@ -735,27 +794,37 @@ function renderAdminList() {
     }
     
     if (currentAdminTab === 'users') {
-        listEl.innerHTML = adminItems.map(item => `
-            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform" onclick="openUserModal('${item.id}')">
+        listEl.innerHTML = adminItems.map(item => {
+            const safeId = encodeId(item.id);
+            const name = escapeHtml(item.name || 'Без имени');
+            const phone = escapeHtml(item.phone || '');
+            const balance = safeNumber(item.balance, 0);
+            const level = String(item.level || 'new').toLowerCase();
+            const levelClass = level === 'vip' ? 'bg-yellow-100 text-yellow-800' : level === 'regular' ? 'bg-blue-100 text-blue-800' : 'bg-stone-100 text-stone-600';
+            const levelLabel = level === 'vip' ? 'VIP' : level === 'regular' ? 'Regular' : 'New';
+            const inactiveBadge = item.active ? '' : '<span class="text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 font-medium">Неактивен</span>';
+            return `
+            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform" onclick="openUserModal('${safeId}')">
                 <div class="flex items-center gap-4 mb-3">
                     <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                         👤
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${item.name || 'Без имени'}</h4>
-                        <p class="text-xs text-stone-500 truncate font-medium">${item.phone || ''}</p>
+                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${name}</h4>
+                        <p class="text-xs text-stone-500 truncate font-medium">${phone}</p>
                     </div>
                     <div class="text-right">
-                        <div class="font-bold text-brand-primary text-lg font-serif">${item.balance || 0}</div>
+                        <div class="font-bold text-brand-primary text-lg font-serif">${balance}</div>
                         <div class="text-xs text-stone-400 font-medium">баллов</div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 pt-3 border-t border-stone-100">
-                    <span class="text-xs px-2.5 py-1 rounded-full font-medium ${item.level === 'vip' ? 'bg-yellow-100 text-yellow-800' : item.level === 'regular' ? 'bg-blue-100 text-blue-800' : 'bg-stone-100 text-stone-600'}">${item.level === 'vip' ? 'VIP' : item.level === 'regular' ? 'Regular' : 'New'}</span>
-                    ${item.active ? '' : '<span class="text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 font-medium">Неактивен</span>'}
+                    <span class="text-xs px-2.5 py-1 rounded-full font-medium ${levelClass}">${levelLabel}</span>
+                    ${inactiveBadge}
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     } else if (currentAdminTab === 'broadcasts') {
         listEl.innerHTML = adminItems.map(item => {
             const statusColors = {
@@ -772,6 +841,17 @@ function renderAdminList() {
                 'completed': 'Завершена',
                 'failed': 'Ошибка'
             };
+            const status = String(item.status || '');
+            const statusClass = statusColors[status] || 'bg-stone-100 text-stone-600';
+            const statusLabel = statusText[status] || escapeHtml(status);
+            const message = String(item.message || '');
+            const shortMessage = message.length > 100 ? `${message.slice(0, 100)}...` : message;
+            const safeMessage = escapeHtml(shortMessage);
+            const imageUrl = safeUrl(item.image_url);
+            const sentCount = safeNumber(item.sent_count, 0);
+            const failedCount = safeNumber(item.failed_count, 0);
+            const safeId = encodeId(item.id);
+
             // created_at хранится в UTC, конвертируем в московское время
             const date = new Intl.DateTimeFormat('ru-RU', {
                 day: '2-digit',
@@ -793,44 +873,40 @@ function renderAdminList() {
                     minute: '2-digit',
                     timeZone: 'Europe/Moscow'
                 }).format(new Date(item.scheduled_at));
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:renderAdminList',message:'Displaying scheduled time',data:{scheduled_at:item.scheduled_at,utcTime:scheduled.toISOString(),localTime:scheduled.toString(),scheduledDate:scheduledDate,utcOffset:scheduled.getTimezoneOffset()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
             }
             
             return `
                 <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card">
                     <div class="flex items-start gap-4 mb-3">
-                        ${item.image_url ? `
-                            <img src="${item.image_url}" class="w-16 h-16 rounded-xl object-cover bg-stone-100 shadow-sm">
+                        ${imageUrl ? `
+                            <img src="${escapeAttr(imageUrl)}" class="w-16 h-16 rounded-xl object-cover bg-stone-100 shadow-sm" alt="">
                         ` : `
                             <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                                 📢
                             </div>
                         `}
                         <div class="flex-1 min-w-0">
-                            <h4 class="font-semibold text-stone-800 text-sm mb-2 line-clamp-2">${item.message.substring(0, 100)}${item.message.length > 100 ? '...' : ''}</h4>
-                            <p class="text-xs text-stone-500 mb-1">Создана: ${date}</p>
-                            ${scheduledDate ? `<p class="text-xs text-purple-600 mb-1">📅 Запланирована: ${scheduledDate}</p>` : ''}
+                            <h4 class="font-semibold text-stone-800 text-sm mb-2 line-clamp-2">${safeMessage}</h4>
+                            <p class="text-xs text-stone-500 mb-1">Создана: ${escapeHtml(date)}</p>
+                            ${scheduledDate ? `<p class="text-xs text-purple-600 mb-1">📅 Запланирована: ${escapeHtml(scheduledDate)}</p>` : ''}
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[item.status] || 'bg-stone-100 text-stone-600'}">${statusText[item.status] || item.status}</span>
-                                ${item.sent_count > 0 ? `<span class="text-xs text-stone-600">✓ ${item.sent_count} отправлено</span>` : ''}
-                                ${item.failed_count > 0 ? `<span class="text-xs text-rose-600">✗ ${item.failed_count} ошибок</span>` : ''}
+                                <span class="text-xs px-2.5 py-1 rounded-full font-medium ${statusClass}">${statusLabel}</span>
+                                ${sentCount > 0 ? `<span class="text-xs text-stone-600">✓ ${sentCount} отправлено</span>` : ''}
+                                ${failedCount > 0 ? `<span class="text-xs text-rose-600">✗ ${failedCount} ошибок</span>` : ''}
                             </div>
                         </div>
                     </div>
                     <div class="flex gap-2 mt-3">
-                        <button onclick="viewBroadcast('${item.id}')" class="px-4 bg-stone-100 text-stone-700 py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                        <button onclick="viewBroadcast('${safeId}')" class="px-4 bg-stone-100 text-stone-700 py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
                             Просмотр
                         </button>
-                        ${item.status === 'pending' || item.status === 'failed' || item.status === 'scheduled' ? `
-                            ${item.status === 'scheduled' ? '' : `
-                                <button onclick="sendBroadcast('${item.id}')" class="flex-1 bg-stone-800 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
-                                    ${item.status === 'failed' ? 'Повторить отправку' : 'Отправить'}
+                        ${status === 'pending' || status === 'failed' || status === 'scheduled' ? `
+                            ${status === 'scheduled' ? '' : `
+                                <button onclick="sendBroadcast('${safeId}')" class="flex-1 bg-stone-800 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                                    ${status === 'failed' ? 'Повторить отправку' : 'Отправить'}
                                 </button>
                             `}
-                            <button onclick="deleteBroadcast('${item.id}')" class="px-4 bg-rose-500 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
+                            <button onclick="deleteBroadcast('${safeId}')" class="px-4 bg-rose-500 text-white py-2.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all">
                                 Удалить
                             </button>
                         ` : ''}
@@ -839,15 +915,21 @@ function renderAdminList() {
             `;
         }).join('');
     } else if (currentAdminTab === 'bot-buttons') {
-        listEl.innerHTML = adminItems.map((item, index) => `
+        listEl.innerHTML = adminItems.map((item, index) => {
+            const safeId = encodeId(item.id);
+            const buttonText = escapeHtml(item.button_text || 'Без названия');
+            const handlerType = escapeHtml(item.handler_type || 'не указан');
+            const rowNumber = safeNumber(item.row_number, 0);
+            const orderInRow = safeNumber(item.order_in_row, 0);
+            return `
             <div class="bg-white p-4 rounded-[28px] border border-white/50 shadow-card flex items-center gap-3">
-                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${item.id}')">
+                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${safeId}')">
                     <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                         🔘
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${item.button_text || 'Без названия'}</h4>
-                        <p class="text-xs text-stone-500 truncate font-medium">Строка ${item.row_number}, порядок ${item.order_in_row} • ${item.handler_type || 'не указан'}</p>
+                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${buttonText}</h4>
+                        <p class="text-xs text-stone-500 truncate font-medium">Строка ${rowNumber}, порядок ${orderInRow} • ${handlerType}</p>
                     </div>
                     <div class="flex items-center gap-2">
                         ${item.is_admin_only ? '<span class="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-600 font-medium">Админ</span>' : ''}
@@ -856,51 +938,64 @@ function renderAdminList() {
                     <div class="text-stone-300 text-lg">→</div>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     } else if (currentAdminTab === 'settings') {
-        listEl.innerHTML = adminItems.map(item => `
-            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform flex items-center gap-4" onclick="openSettingModal('${item.key}')">
+        listEl.innerHTML = adminItems.map(item => {
+            const safeKey = encodeId(item.key);
+            const description = escapeHtml(item.description || item.key);
+            const value = escapeHtml(item.value);
+            return `
+            <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform flex items-center gap-4" onclick="openSettingModal('${safeKey}')">
                 <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                     ⚙️
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${item.description || item.key}</h4>
-                    <p class="text-xs text-stone-500 font-medium">${item.value}</p>
+                    <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${description}</h4>
+                    <p class="text-xs text-stone-500 font-medium">${value}</p>
                 </div>
                 <div class="text-stone-300 text-lg">→</div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     } else {
         // Для остальных вкладок (masters, services, promotions)
-        listEl.innerHTML = adminItems.map((item, index) => `
+        listEl.innerHTML = adminItems.map((item, index) => {
+            const safeId = encodeId(item.id);
+            const imageUrl = safeUrl(item.photo_url || item.image_url);
+            const title = escapeHtml(item.name || item.title || '');
+            const price = Number.isFinite(Number(item.price)) ? `${Number(item.price)} ₽` : '';
+            const subtitle = escapeHtml(item.specialization || price || item.description || '');
+            return `
             <div class="bg-white p-4 rounded-[28px] border border-white/50 shadow-card flex items-center gap-3">
                 <div class="flex flex-col gap-1">
-                    <button onclick="event.stopPropagation(); moveItem('${item.id}', 'up')" 
+                    <button onclick="event.stopPropagation(); moveItem('${safeId}', 'up')" 
                             class="w-8 h-8 rounded-lg bg-stone-50 text-stone-600 flex items-center justify-center text-xs font-bold active:bg-stone-100 transition-colors shadow-sm ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}"
                             ${index === 0 ? 'disabled' : ''}>
                         ↑
                     </button>
-                    <button onclick="event.stopPropagation(); moveItem('${item.id}', 'down')" 
+                    <button onclick="event.stopPropagation(); moveItem('${safeId}', 'down')" 
                             class="w-8 h-8 rounded-lg bg-stone-50 text-stone-600 flex items-center justify-center text-xs font-bold active:bg-stone-100 transition-colors shadow-sm ${index === adminItems.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}"
                             ${index === adminItems.length - 1 ? 'disabled' : ''}>
                         ↓
                     </button>
                 </div>
-                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${item.id}')">
-                    ${item.photo_url || item.image_url ? 
-                        `<img src="${item.photo_url || item.image_url}" class="w-12 h-12 rounded-xl object-cover bg-stone-100 shadow-sm">` : 
+                <div class="flex-1 flex items-center gap-4 active:scale-[0.98] transition-transform rounded-xl p-2" onclick="openAdminModal('${safeId}')">
+                    ${imageUrl ? 
+                        `<img src="${escapeAttr(imageUrl)}" class="w-12 h-12 rounded-xl object-cover bg-stone-100 shadow-sm" alt="">` : 
                         `<div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
                             ${currentAdminTab === 'masters' ? '👩‍⚕️' : currentAdminTab === 'services' ? '✨' : '🎁'}
                         </div>`
                     }
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${item.name || item.title}</h4>
-                        <p class="text-xs text-stone-500 truncate font-medium">${item.specialization || item.price + ' ₽' || item.description || ''}</p>
+                        <h4 class="font-semibold text-stone-800 text-sm truncate mb-1">${title}</h4>
+                        <p class="text-xs text-stone-500 truncate font-medium">${subtitle}</p>
                     </div>
                     <div class="text-stone-300 text-lg">→</div>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
     }
 }
 
@@ -912,18 +1007,19 @@ function openAdminModal(id = null) {
     const fields = document.getElementById('form-fields');
     const deleteBtn = document.getElementById('delete-btn');
     const formId = document.getElementById('form-id');
+    const decodedId = id ? decodeId(id) : null;
     
     // Для рассылок не поддерживаем редактирование, только создание
-    if (currentAdminTab === 'broadcasts' && id) {
+    if (currentAdminTab === 'broadcasts' && decodedId) {
         alert('Редактирование рассылок не поддерживается. Создайте новую рассылку.');
         return;
     }
     
     form.reset();
-    formId.value = id || '';
+    formId.value = decodedId || '';
     
-    if (id && currentAdminTab !== 'broadcasts') {
-        const item = adminItems.find(i => i.id === id);
+    if (decodedId && currentAdminTab !== 'broadcasts') {
+        const item = adminItems.find(i => String(i.id) === String(decodedId));
         title.innerText = 'Редактировать';
         deleteBtn.classList.remove('hidden');
         renderFormFields(item);
@@ -952,20 +1048,21 @@ async function openUserModal(id) {
     const fields = document.getElementById('form-fields');
     const deleteBtn = document.getElementById('delete-btn');
     const formId = document.getElementById('form-id');
+    const decodedId = decodeId(id);
     
     form.reset();
-    formId.value = id;
+    formId.value = decodedId;
     
     // Восстанавливаем стандартный обработчик submit
     form.onsubmit = handleAdminSubmit;
     
     try {
-        const user = await apiFetch(`/api/admin/users/${id}`);
+        const user = await apiFetch(`/api/admin/users/${decodedId}`);
         title.innerText = user.name || user.phone || 'Пользователь';
         deleteBtn.classList.add('hidden');
         
         // Загружаем транзакции
-        currentUserTransactions = await apiFetch(`/api/admin/users/${id}/transactions`);
+        currentUserTransactions = await apiFetch(`/api/admin/users/${decodedId}/transactions`);
         
         renderUserForm(user);
         
@@ -986,25 +1083,46 @@ async function openUserModal(id) {
 
 function renderUserForm(user) {
     const fieldsEl = document.getElementById('form-fields');
+    const safeName = escapeAttr(user.name || '');
+    const safePhone = escapeAttr(user.phone || '');
+    const balance = safeNumber(user.balance, 0);
+    const level = String(user.level || 'new');
+    const transactionsHtml = currentUserTransactions.length ? currentUserTransactions.map(t => {
+        const description = escapeHtml(t.description || 'Транзакция');
+        const createdAt = new Date(t.created_at).toLocaleString('ru-RU');
+        const amount = safeNumber(t.amount, 0);
+        return `
+                    <div class="flex justify-between items-center p-2 bg-stone-50 rounded-lg text-xs">
+                        <div>
+                            <div class="font-semibold text-stone-800">${description}</div>
+                            <div class="text-stone-400">${escapeHtml(createdAt)}</div>
+                        </div>
+                        <div class="font-bold ${amount > 0 ? 'text-green-600' : 'text-rose-600'}">
+                            ${amount > 0 ? '+' : ''}${amount}
+                        </div>
+                    </div>
+        `;
+    }).join('') : '<div class="text-center py-4 text-stone-400 text-xs">Нет транзакций</div>';
+
     const html = `
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Имя</label>
-            <input type="text" name="name" value="${user.name || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+            <input type="text" name="name" value="${safeName}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Телефон</label>
-            <input type="text" name="phone" value="${user.phone || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" readonly>
+            <input type="text" name="phone" value="${safePhone}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" readonly>
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Баланс баллов</label>
-            <input type="number" name="balance" value="${user.balance || 0}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+            <input type="number" name="balance" value="${balance}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Уровень</label>
             <select name="level" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                <option value="new" ${user.level === 'new' ? 'selected' : ''}>New</option>
-                <option value="regular" ${user.level === 'regular' ? 'selected' : ''}>Regular</option>
-                <option value="vip" ${user.level === 'vip' ? 'selected' : ''}>VIP</option>
+                <option value="new" ${level === 'new' ? 'selected' : ''}>New</option>
+                <option value="regular" ${level === 'regular' ? 'selected' : ''}>Regular</option>
+                <option value="vip" ${level === 'vip' ? 'selected' : ''}>VIP</option>
             </select>
         </div>
         <div class="flex items-center gap-2 px-1">
@@ -1015,19 +1133,9 @@ function renderUserForm(user) {
         <div class="pt-4 border-t border-stone-200 mt-4">
             <h4 class="text-sm font-bold text-stone-700 mb-3">История транзакций</h4>
             <div id="user-transactions-list" class="space-y-2 max-h-48 overflow-y-auto">
-                ${currentUserTransactions.length ? currentUserTransactions.map(t => `
-                    <div class="flex justify-between items-center p-2 bg-stone-50 rounded-lg text-xs">
-                        <div>
-                            <div class="font-semibold text-stone-800">${t.description || 'Транзакция'}</div>
-                            <div class="text-stone-400">${new Date(t.created_at).toLocaleString('ru-RU')}</div>
-                        </div>
-                        <div class="font-bold ${t.amount > 0 ? 'text-green-600' : 'text-rose-600'}">
-                            ${t.amount > 0 ? '+' : ''}${t.amount}
-                        </div>
-                    </div>
-                `).join('') : '<div class="text-center py-4 text-stone-400 text-xs">Нет транзакций</div>'}
+                ${transactionsHtml}
             </div>
-            <button type="button" onclick="openTransactionModal(${user.id})" class="w-full mt-3 bg-stone-100 text-stone-700 py-2 rounded-xl text-sm font-semibold active:opacity-80">
+            <button type="button" onclick="openTransactionModal('${encodeId(user.id)}')" class="w-full mt-3 bg-stone-100 text-stone-700 py-2 rounded-xl text-sm font-semibold active:opacity-80">
                 + Добавить транзакцию
             </button>
         </div>
@@ -1044,15 +1152,16 @@ function openTransactionModal(userId) {
     const fields = document.getElementById('form-fields');
     const deleteBtn = document.getElementById('delete-btn');
     const formId = document.getElementById('form-id');
+    const decodedUserId = decodeId(userId);
     
     form.reset();
-    formId.value = userId;
+    formId.value = decodedUserId;
     
     title.innerText = 'Добавить транзакцию';
     deleteBtn.classList.add('hidden');
     
     const html = `
-        <input type="hidden" name="user_id" value="${userId}">
+        <input type="hidden" name="user_id" value="${escapeAttr(decodedUserId)}">
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Сумма</label>
             <input type="number" name="amount" placeholder="Положительное = начисление, отрицательное = списание" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
@@ -1068,7 +1177,7 @@ function openTransactionModal(userId) {
     // Переопределяем submit для транзакций
     form.onsubmit = async (e) => {
         e.preventDefault();
-        await handleTransactionSubmit(e, userId);
+        await handleTransactionSubmit(e, decodedUserId);
     };
     
     modal.classList.remove('hidden');
@@ -1118,27 +1227,59 @@ async function handleTransactionSubmit(e, userId) {
 function renderFormFields(item = {}) {
     const fieldsEl = document.getElementById('form-fields');
     let html = '';
-    
+
+    const safe = {
+        name: escapeAttr(item.name || ''),
+        phone: escapeAttr(item.phone || ''),
+        balance: safeNumber(item.balance, 0),
+        level: String(item.level || 'new'),
+        specialization: escapeAttr(item.specialization || ''),
+        title: escapeAttr(item.title || ''),
+        category: escapeAttr(item.category || ''),
+        price: escapeAttr(item.price ?? ''),
+        description: escapeHtml(item.description || ''),
+        detailText: escapeHtml(item.detail_text || ''),
+        conditions: escapeHtml(item.conditions || ''),
+        photoUrl: safeUrl(item.photo_url),
+        imageUrl: safeUrl(item.image_url),
+        endDate: escapeAttr(item.end_date || ''),
+        actionUrl: escapeAttr(item.action_url || ''),
+        actionText: escapeAttr(item.action_text || 'Записаться'),
+        message: escapeHtml(item.message || ''),
+        recipientType: String(item.recipient_type || ''),
+        recipientIds: escapeAttr(JSON.stringify(item.recipient_ids || [])),
+        filterBalanceMin: escapeAttr(item.filter_balance_min || ''),
+        filterBalanceMax: escapeAttr(item.filter_balance_max || ''),
+        buttonText: escapeAttr(item.button_text || ''),
+        responseText: escapeHtml(item.response_text || ''),
+        handlerType: String(item.handler_type || ''),
+        rowNumber: safeNumber(item.row_number, 1),
+        orderInRow: safeNumber(item.order_in_row, 0),
+        webAppUrl: escapeAttr(item.web_app_url || ''),
+        isActive: item.is_active !== false,
+        isAdminOnly: !!item.is_admin_only
+    };
+
     if (currentAdminTab === 'users') {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Имя</label>
-                <input type="text" name="name" value="${item.name || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="name" value="${safe.name}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Телефон</label>
-                <input type="text" name="phone" value="${item.phone || ''}" placeholder="79991234567" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="phone" value="${safe.phone}" placeholder="79991234567" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Баланс баллов</label>
-                <input type="number" name="balance" value="${item.balance || 0}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <input type="number" name="balance" value="${safe.balance}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Уровень</label>
                 <select name="level" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                    <option value="new" ${item.level === 'new' ? 'selected' : ''}>New</option>
-                    <option value="regular" ${item.level === 'regular' ? 'selected' : ''}>Regular</option>
-                    <option value="vip" ${item.level === 'vip' ? 'selected' : ''}>VIP</option>
+                    <option value="new" ${safe.level === 'new' ? 'selected' : ''}>New</option>
+                    <option value="regular" ${safe.level === 'regular' ? 'selected' : ''}>Regular</option>
+                    <option value="vip" ${safe.level === 'vip' ? 'selected' : ''}>VIP</option>
                 </select>
             </div>
             <div class="flex items-center gap-2 px-1">
@@ -1150,17 +1291,17 @@ function renderFormFields(item = {}) {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Имя мастера</label>
-                <input type="text" name="name" value="${item.name || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="name" value="${safe.name}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Специализация</label>
-                <input type="text" name="specialization" value="${item.specialization || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <input type="text" name="specialization" value="${safe.specialization}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Фото мастера</label>
                 <input type="file" accept="image/*" id="master-photo-input" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                <input type="hidden" name="photo_url" id="master-photo-url" value="${item.photo_url || ''}">
-                ${item.photo_url ? `<div class="mt-2"><img src="${item.photo_url}" class="w-20 h-20 object-cover rounded-lg" id="master-photo-preview"></div>` : ''}
+                <input type="hidden" name="photo_url" id="master-photo-url" value="${escapeAttr(safe.photoUrl)}">
+                ${safe.photoUrl ? `<div class="mt-2"><img src="${escapeAttr(safe.photoUrl)}" class="w-20 h-20 object-cover rounded-lg" id="master-photo-preview" alt=""></div>` : ''}
                 <div id="master-photo-upload-status" class="mt-2 text-xs text-stone-500 hidden"></div>
             </div>
         `;
@@ -1168,29 +1309,29 @@ function renderFormFields(item = {}) {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Название услуги</label>
-                <input type="text" name="title" value="${item.title || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="title" value="${safe.title}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Цена (₽)</label>
-                <input type="number" name="price" value="${item.price || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="number" name="price" value="${safe.price}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Категория</label>
-                <input type="text" name="category" value="${item.category || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <input type="text" name="category" value="${safe.category}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Описание</label>
-                <textarea name="description" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24">${item.description || ''}</textarea>
+                <textarea name="description" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24">${safe.description}</textarea>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Изображение услуги</label>
                 <input type="file" accept="image/*" id="service-image-input" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                <input type="hidden" name="image_url" id="service-image-url" value="${item.image_url || ''}">
-                ${item.image_url ? `<div class="mt-2"><img src="${item.image_url}" class="w-32 h-32 object-cover rounded-lg" id="service-image-preview"></div>` : ''}
+                <input type="hidden" name="image_url" id="service-image-url" value="${escapeAttr(safe.imageUrl)}">
+                ${safe.imageUrl ? `<div class="mt-2"><img src="${escapeAttr(safe.imageUrl)}" class="w-32 h-32 object-cover rounded-lg" id="service-image-preview" alt=""></div>` : ''}
                 <div id="service-image-upload-status" class="mt-2 text-xs text-stone-500 hidden"></div>
             </div>
             <div class="flex items-center gap-2 px-1">
-                <input type="checkbox" name="is_active" ${item.is_active !== false ? 'checked' : ''} class="w-4 h-4 rounded">
+                <input type="checkbox" name="is_active" ${safe.isActive ? 'checked' : ''} class="w-4 h-4 rounded">
                 <label class="text-sm font-semibold text-stone-600">Активна</label>
             </div>
         `;
@@ -1198,45 +1339,45 @@ function renderFormFields(item = {}) {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Заголовок акции</label>
-                <input type="text" name="title" value="${item.title || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="title" value="${safe.title}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Краткое описание</label>
-                <textarea name="description" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24" placeholder="Краткое описание для карточки акции">${item.description || ''}</textarea>
+                <textarea name="description" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24" placeholder="Краткое описание для карточки акции">${safe.description}</textarea>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Детальное описание</label>
-                <textarea name="detail_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" placeholder="Полное описание акции, которое будет показано при нажатии 'Узнать больше'">${item.detail_text || ''}</textarea>
+                <textarea name="detail_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" placeholder="Полное описание акции, которое будет показано при нажатии 'Узнать больше'">${safe.detailText}</textarea>
                 <p class="text-xs text-stone-400 mt-1 px-1">Поддерживается перенос строк. Будет отображено в модальном окне</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Условия акции</label>
-                <textarea name="conditions" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24" placeholder="Условия участия в акции (необязательно)">${item.conditions || ''}</textarea>
+                <textarea name="conditions" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-24" placeholder="Условия участия в акции (необязательно)">${safe.conditions}</textarea>
                 <p class="text-xs text-stone-400 mt-1 px-1">Условия будут отображены в отдельном блоке</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Изображение акции</label>
                 <input type="file" accept="image/*" id="promotion-image-input" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                <input type="hidden" name="image_url" id="promotion-image-url" value="${item.image_url || ''}">
-                ${item.image_url ? `<div class="mt-2"><img src="${item.image_url}" class="w-32 h-32 object-cover rounded-lg" id="promotion-image-preview"></div>` : ''}
+                <input type="hidden" name="image_url" id="promotion-image-url" value="${escapeAttr(safe.imageUrl)}">
+                ${safe.imageUrl ? `<div class="mt-2"><img src="${escapeAttr(safe.imageUrl)}" class="w-32 h-32 object-cover rounded-lg" id="promotion-image-preview" alt=""></div>` : ''}
                 <div id="promotion-image-upload-status" class="mt-2 text-xs text-stone-500 hidden"></div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Дата окончания (гггг-мм-дд)</label>
-                <input type="date" name="end_date" value="${item.end_date || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <input type="date" name="end_date" value="${safe.endDate}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">URL кнопки действия (необязательно)</label>
-                <input type="text" name="action_url" value="${item.action_url || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="https://example.com или оставьте пустым для записи">
+                <input type="text" name="action_url" value="${safe.actionUrl}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="https://example.com или оставьте пустым для записи">
                 <p class="text-xs text-stone-400 mt-1 px-1">Если не указано, будет использована ссылка на запись</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст кнопки действия</label>
-                <input type="text" name="action_text" value="${item.action_text || 'Записаться'}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Записаться">
+                <input type="text" name="action_text" value="${safe.actionText}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Записаться">
                 <p class="text-xs text-stone-400 mt-1 px-1">Текст на кнопке в детальном просмотре (по умолчанию "Записаться")</p>
             </div>
             <div class="flex items-center gap-2 px-1">
-                <input type="checkbox" name="is_active" ${item.is_active !== false ? 'checked' : ''} class="w-4 h-4 rounded">
+                <input type="checkbox" name="is_active" ${safe.isActive ? 'checked' : ''} class="w-4 h-4 rounded">
                 <label class="text-sm font-semibold text-stone-600">Активна</label>
             </div>
         `;
@@ -1253,30 +1394,26 @@ function renderFormFields(item = {}) {
             const hours = String(date.getHours()).padStart(2, '0'); // getHours() уже возвращает локальное время
             const minutes = String(date.getMinutes()).padStart(2, '0');
             scheduledAtValue = `${year}-${month}-${day}T${hours}:${minutes}`;
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:renderFormFields',message:'Formatting scheduled_at for datetime-local',data:{scheduled_at:item.scheduled_at,utcTime:date.toISOString(),localTime:date.toString(),scheduledAtValue:scheduledAtValue,utcOffset:date.getTimezoneOffset()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
         }
         
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст сообщения</label>
-                <textarea name="message" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" required>${item.message || ''}</textarea>
+                <textarea name="message" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" required>${safe.message}</textarea>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Изображение</label>
                 <input type="file" accept="image/*" id="broadcast-image-input" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                <input type="hidden" name="image_url" id="broadcast-image-url" value="${item.image_url || ''}">
-                ${item.image_url ? `<div class="mt-2"><img src="${item.image_url}" class="w-32 h-32 object-cover rounded-lg" id="broadcast-image-preview"></div>` : ''}
+                <input type="hidden" name="image_url" id="broadcast-image-url" value="${escapeAttr(safe.imageUrl)}">
+                ${safe.imageUrl ? `<div class="mt-2"><img src="${escapeAttr(safe.imageUrl)}" class="w-32 h-32 object-cover rounded-lg" id="broadcast-image-preview" alt=""></div>` : ''}
                 <div id="broadcast-image-upload-status" class="mt-2 text-xs text-stone-500 hidden"></div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Получатели</label>
                 <select name="recipient_type" id="broadcast-recipient-type" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
-                    <option value="all" ${item.recipient_type === 'all' ? 'selected' : ''}>Все пользователи</option>
-                    <option value="selected" ${item.recipient_type === 'selected' ? 'selected' : ''}>Выбранные пользователи</option>
-                    <option value="by_balance" ${item.recipient_type === 'by_balance' ? 'selected' : ''}>По балансу баллов</option>
+                    <option value="all" ${safe.recipientType === 'all' ? 'selected' : ''}>Все пользователи</option>
+                    <option value="selected" ${safe.recipientType === 'selected' ? 'selected' : ''}>Выбранные пользователи</option>
+                    <option value="by_balance" ${safe.recipientType === 'by_balance' ? 'selected' : ''}>По балансу баллов</option>
                 </select>
             </div>
             <div id="selected-users-container" class="hidden">
@@ -1284,19 +1421,19 @@ function renderFormFields(item = {}) {
                 <div id="users-list" class="max-h-48 overflow-y-auto border border-stone-100 rounded-xl p-3 bg-stone-50">
                     <div class="text-sm text-stone-500">Загрузка пользователей...</div>
                 </div>
-                <input type="hidden" name="recipient_ids" id="broadcast-recipient-ids" value="${JSON.stringify(item.recipient_ids || [])}">
+                <input type="hidden" name="recipient_ids" id="broadcast-recipient-ids" value="${safe.recipientIds}">
             </div>
             <div id="balance-filter" class="hidden">
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Минимальный баланс</label>
-                <input type="number" name="filter_balance_min" value="${item.filter_balance_min || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Не указано">
+                <input type="number" name="filter_balance_min" value="${safe.filterBalanceMin}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Не указано">
             </div>
             <div id="balance-filter-max" class="hidden">
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Максимальный баланс</label>
-                <input type="number" name="filter_balance_max" value="${item.filter_balance_max || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Не указано">
+                <input type="number" name="filter_balance_max" value="${safe.filterBalanceMax}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="Не указано">
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Запланировать отправку (необязательно)</label>
-                <input type="datetime-local" name="scheduled_at" value="${scheduledAtValue}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <input type="datetime-local" name="scheduled_at" value="${escapeAttr(scheduledAtValue)}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
                 <p class="text-xs text-stone-400 mt-1 px-1">Оставьте пустым для немедленной отправки</p>
             </div>
         `;
@@ -1304,42 +1441,42 @@ function renderFormFields(item = {}) {
         html = `
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст кнопки</label>
-                <input type="text" name="button_text" value="${item.button_text || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+                <input type="text" name="button_text" value="${safe.buttonText}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст ответа</label>
-                <textarea name="response_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" required>${item.response_text || ''}</textarea>
+                <textarea name="response_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" required>${safe.responseText}</textarea>
                 <p class="text-xs text-stone-400 mt-1 px-1">Поддерживается Markdown. Можно использовать {YCLIENTS_BOOKING_URL} и {LOYALTY_PERCENTAGE}</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Тип обработчика</label>
                 <select name="handler_type" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                    <option value="book" ${item.handler_type === 'book' ? 'selected' : ''}>Запись</option>
-                    <option value="info" ${item.handler_type === 'info' ? 'selected' : ''}>Информация</option>
-                    <option value="profile" ${item.handler_type === 'profile' ? 'selected' : ''}>Профиль</option>
-                    <option value="admin" ${item.handler_type === 'admin' ? 'selected' : ''}>Админка</option>
+                    <option value="book" ${safe.handlerType === 'book' ? 'selected' : ''}>Запись</option>
+                    <option value="info" ${safe.handlerType === 'info' ? 'selected' : ''}>Информация</option>
+                    <option value="profile" ${safe.handlerType === 'profile' ? 'selected' : ''}>Профиль</option>
+                    <option value="admin" ${safe.handlerType === 'admin' ? 'selected' : ''}>Админка</option>
                 </select>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Номер строки</label>
-                    <input type="number" name="row_number" value="${item.row_number || 1}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="1" required>
+                    <input type="number" name="row_number" value="${safe.rowNumber}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="1" required>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Порядок в строке</label>
-                    <input type="number" name="order_in_row" value="${item.order_in_row || 0}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="0" required>
+                    <input type="number" name="order_in_row" value="${safe.orderInRow}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" min="0" required>
                 </div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">WebApp URL (необязательно)</label>
-                <input type="text" name="web_app_url" value="${item.web_app_url || ''}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="https://example.com/webapp">
+                <input type="text" name="web_app_url" value="${safe.webAppUrl}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" placeholder="https://example.com/webapp">
             </div>
             <div class="flex items-center gap-2 px-1">
-                <input type="checkbox" name="is_admin_only" ${item.is_admin_only ? 'checked' : ''} class="w-4 h-4 rounded">
+                <input type="checkbox" name="is_admin_only" ${safe.isAdminOnly ? 'checked' : ''} class="w-4 h-4 rounded">
                 <label class="text-sm font-semibold text-stone-600">Только для админов</label>
             </div>
             <div class="flex items-center gap-2 px-1">
-                <input type="checkbox" name="is_active" ${item.is_active !== false ? 'checked' : ''} class="w-4 h-4 rounded">
+                <input type="checkbox" name="is_active" ${safe.isActive ? 'checked' : ''} class="w-4 h-4 rounded">
                 <label class="text-sm font-semibold text-stone-600">Активна</label>
             </div>
         `;
@@ -1420,19 +1557,26 @@ async function loadUsersForSelection(selectedIds = []) {
     
     try {
         const users = await apiFetch('/api/admin/users');
-        const selectedSet = new Set(selectedIds);
+        const selectedSet = new Set(selectedIds.map((id) => String(id)));
         
-        usersListEl.innerHTML = users.map(user => `
+        usersListEl.innerHTML = users.map(user => {
+            const safeId = escapeAttr(user.id);
+            const name = escapeHtml(user.name || 'Без имени');
+            const phone = escapeHtml(user.phone || '');
+            const balance = safeNumber(user.balance, 0);
+            const isChecked = selectedSet.has(String(user.id)) ? 'checked' : '';
+            return `
             <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-stone-100 cursor-pointer">
-                <input type="checkbox" value="${user.id}" ${selectedSet.has(user.id) ? 'checked' : ''} 
+                <input type="checkbox" value="${safeId}" ${isChecked} 
                        class="w-4 h-4 rounded" onchange="updateBroadcastRecipients()">
                 <div class="flex-1">
-                    <div class="text-sm font-semibold text-stone-800">${user.name || 'Без имени'}</div>
-                    <div class="text-xs text-stone-500">${user.phone || ''}</div>
+                    <div class="text-sm font-semibold text-stone-800">${name}</div>
+                    <div class="text-xs text-stone-500">${phone}</div>
                 </div>
-                <div class="text-xs text-stone-400">${user.balance || 0} баллов</div>
+                <div class="text-xs text-stone-400">${balance} баллов</div>
             </label>
-        `).join('');
+            `;
+        }).join('');
     } catch (error) {
         console.error("Error loading users:", error);
         usersListEl.innerHTML = '<div class="text-sm text-rose-500">Ошибка загрузки пользователей</div>';
@@ -1441,7 +1585,11 @@ async function loadUsersForSelection(selectedIds = []) {
 
 function updateBroadcastRecipients() {
     const checkboxes = document.querySelectorAll('#users-list input[type="checkbox"]:checked');
-    const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    const selectedIds = Array.from(checkboxes).map(cb => {
+        const value = cb.value;
+        const num = Number(value);
+        return Number.isFinite(num) ? num : value;
+    });
     const hiddenInput = document.getElementById('broadcast-recipient-ids');
     if (hiddenInput) {
         hiddenInput.value = JSON.stringify(selectedIds);
@@ -1580,21 +1728,14 @@ async function openPromotionDetail(promotionId) {
         
         // Определяем текст и URL кнопки действия
         const actionText = promotion.action_text || 'Записаться';
-        const actionUrl = promotion.action_url || contentData.booking_url || bookingUrl || '#';
-        
-        // Базовое экранирование HTML для безопасности
-        const escapeHtml = (text) => {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        };
+        const actionUrl = safeUrl(promotion.action_url) || safeUrl(contentData.booking_url) || safeUrl(bookingUrl) || '#';
+        const imageUrl = safeUrl(promotion.image_url);
         
         // Формируем HTML контента с экранированием
         content.innerHTML = `
-            ${promotion.image_url ? `
+            ${imageUrl ? `
                 <div class="mb-6 -mx-6 -mt-6">
-                    <img src="${escapeHtml(promotion.image_url)}" class="w-full h-48 object-cover" alt="${escapeHtml(promotion.title)}">
+                    <img src="${escapeAttr(imageUrl)}" class="w-full h-48 object-cover" alt="${escapeHtml(promotion.title)}">
                 </div>
             ` : ''}
             
@@ -1626,7 +1767,7 @@ async function openPromotionDetail(promotionId) {
             ` : ''}
             
             <div class="pt-4">
-                <button onclick="window.open('${escapeHtml(actionUrl)}', '_blank'); closePromotionDetail();" 
+                <button onclick="window.open('${escapeAttr(actionUrl)}', '_blank'); closePromotionDetail();" 
                         class="w-full bg-stone-800 text-white py-4 rounded-[20px] font-bold shadow-card active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                     <span>${escapeHtml(actionText)}</span>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -1676,24 +1817,25 @@ async function openSettingModal(key) {
     const fields = document.getElementById('form-fields');
     const deleteBtn = document.getElementById('delete-btn');
     const formId = document.getElementById('form-id');
+    const decodedKey = decodeId(key);
     
-    const setting = adminItems.find(s => s.key === key);
+    const setting = adminItems.find(s => String(s.key) === String(decodedKey));
     if (!setting) return;
     
     form.reset();
-    formId.value = key;
+    formId.value = decodedKey;
     title.innerText = 'Настройка';
     deleteBtn.classList.add('hidden');
     
     // Переопределяем submit для настроек
     form.onsubmit = async (e) => {
         e.preventDefault();
-        await handleSettingSubmit(e, key);
+        await handleSettingSubmit(e, decodedKey);
     };
     
     let inputHtml = '';
     if (setting.type === 'number' || setting.type === 'float') {
-        inputHtml = `<input type="number" name="value" value="${setting.value}" step="${setting.type === 'float' ? '0.01' : '1'}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
+        inputHtml = `<input type="number" name="value" value="${escapeAttr(setting.value)}" step="${setting.type === 'float' ? '0.01' : '1'}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
     } else if (setting.type === 'boolean') {
         inputHtml = `
             <select name="value" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
@@ -1702,14 +1844,14 @@ async function openSettingModal(key) {
             </select>
         `;
     } else {
-        inputHtml = `<input type="text" name="value" value="${setting.value}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
+        inputHtml = `<input type="text" name="value" value="${escapeAttr(setting.value)}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
     }
 
     fields.innerHTML = `
         <div>
-            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">${setting.description || key}</label>
+            <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">${escapeHtml(setting.description || decodedKey)}</label>
             ${inputHtml}
-            <p class="text-[10px] text-stone-400 mt-2 px-1">Ключ: ${key} | Тип: ${setting.type}</p>
+            <p class="text-[10px] text-stone-400 mt-2 px-1">Ключ: ${escapeHtml(decodedKey)} | Тип: ${escapeHtml(setting.type)}</p>
         </div>
     `;
     
@@ -1856,10 +1998,6 @@ async function handleAdminSubmit(e) {
         data.recipient_type = formData.get('recipient_type');
         data.image_url = formData.get('image_url') || null;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:handleAdminSubmit',message:'Broadcast form data prepared',data:{has_image_url:!!data.image_url,image_url:data.image_url,recipient_type:data.recipient_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        
         // Обработка scheduled_at
         const scheduledAt = formData.get('scheduled_at');
         if (scheduledAt) {
@@ -1867,11 +2005,6 @@ async function handleAdminSubmit(e) {
             // Нужно создать Date объект, который интерпретирует это как локальное время
             // и затем конвертировать в ISO (UTC)
             const date = new Date(scheduledAt);
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:handleAdminSubmit',message:'Scheduled time conversion',data:{scheduledAt:scheduledAt,localTime:date.toString(),isoTime:date.toISOString(),utcOffset:date.getTimezoneOffset()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            
             data.scheduled_at = date.toISOString();
         } else {
             data.scheduled_at = null;
@@ -1951,12 +2084,13 @@ async function handleAdminSubmit(e) {
 }
 
 async function sendBroadcast(id) {
+    const decodedId = decodeId(id);
     if (!confirm('Отправить рассылку? Это действие нельзя отменить.')) {
         return;
     }
     
     try {
-        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${id}/send`, {
+        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${decodedId}/send`, {
             method: 'POST',
             headers: {
                 'X-Tg-Init-Data': tg.initData || '',
@@ -1977,7 +2111,8 @@ async function sendBroadcast(id) {
 
 async function viewBroadcast(id) {
     try {
-        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${id}?_t=${Date.now()}`, {
+        const decodedId = decodeId(id);
+        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${decodedId}?_t=${Date.now()}`, {
             headers: {
                 'X-Tg-Init-Data': tg.initData || ''
             }
@@ -2021,46 +2156,56 @@ async function viewBroadcast(id) {
         // Создаем модальное окно с деталями
         const modal = document.getElementById('admin-modal');
         const container = document.getElementById('modal-container');
-        const fieldsEl = document.getElementById('admin-form-fields');
-        const titleEl = document.getElementById('admin-modal-title');
-        
+        const fieldsEl = document.getElementById('form-fields');
+        const titleEl = document.getElementById('modal-title');
+        if (!modal || !container || !fieldsEl || !titleEl) return;
+
+        const message = escapeHtml(broadcast.message || '');
+        const imageUrl = safeUrl(broadcast.image_url);
+        const safeRecipientInfo = escapeHtml(recipientInfo);
+        const safeStatus = escapeHtml(broadcast.status || '');
+        const safeCreatedDate = escapeHtml(createdDate);
+        const safeScheduledDate = scheduledDate ? escapeHtml(scheduledDate) : '';
+        const sentCount = safeNumber(broadcast.sent_count, 0);
+        const failedCount = safeNumber(broadcast.failed_count, 0);
+
         titleEl.textContent = 'Детали рассылки';
         fieldsEl.innerHTML = `
             <div class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст сообщения</label>
-                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm whitespace-pre-wrap">${broadcast.message || ''}</div>
+                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm whitespace-pre-wrap">${message}</div>
                 </div>
-                ${broadcast.image_url ? `
+                ${imageUrl ? `
                     <div>
                         <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Изображение</label>
-                        <img src="${broadcast.image_url}" class="w-full max-w-md rounded-xl object-cover bg-stone-100 shadow-sm">
+                        <img src="${escapeAttr(imageUrl)}" class="w-full max-w-md rounded-xl object-cover bg-stone-100 shadow-sm" alt="">
                     </div>
                 ` : ''}
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Получатели</label>
-                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${recipientInfo}</div>
+                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${safeRecipientInfo}</div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Статус</label>
-                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${broadcast.status}</div>
+                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${safeStatus}</div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Создана</label>
-                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${createdDate}</div>
+                    <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${safeCreatedDate}</div>
                 </div>
                 ${scheduledDate ? `
                     <div>
                         <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Запланирована на</label>
-                        <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${scheduledDate}</div>
+                        <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">${safeScheduledDate}</div>
                     </div>
                 ` : ''}
-                ${broadcast.sent_count > 0 || broadcast.failed_count > 0 ? `
+                ${sentCount > 0 || failedCount > 0 ? `
                     <div>
                         <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Статистика</label>
                         <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
-                            Отправлено: ${broadcast.sent_count || 0}<br>
-                            Ошибок: ${broadcast.failed_count || 0}
+                            Отправлено: ${sentCount}<br>
+                            Ошибок: ${failedCount}
                         </div>
                     </div>
                 ` : ''}
@@ -2087,12 +2232,13 @@ async function viewBroadcast(id) {
 }
 
 async function deleteBroadcast(id) {
+    const decodedId = decodeId(id);
     if (!confirm('Удалить эту рассылку? Это действие нельзя отменить.')) {
         return;
     }
     
     try {
-        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${id}`, {
+        const response = await fetch(`${window.location.origin}/api/admin/broadcasts/${decodedId}`, {
             method: 'DELETE',
             headers: {
                 'X-Tg-Init-Data': tg.initData || ''
@@ -2139,7 +2285,8 @@ async function moveItem(id, direction) {
     
     if (currentAdminTab === 'users' || currentAdminTab === 'bot-buttons') return; // Пользователи и кнопки бота не перемещаются через эту функцию
     
-    const url = `${window.location.origin}/api/admin/${currentAdminTab}/${id}/move?direction=${direction}`;
+    const decodedId = decodeId(id);
+    const url = `${window.location.origin}/api/admin/${currentAdminTab}/${decodedId}/move?direction=${direction}`;
     
     
     
