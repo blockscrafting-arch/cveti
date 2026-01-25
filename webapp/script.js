@@ -23,27 +23,46 @@ if (!window.Telegram?.WebApp) {
 const tg = window.Telegram?.WebApp || {};
 
 // #region agent log
-window.addEventListener('error', (event) => {
+function sendClientLog(payload) {
     try {
         fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: 'debug-session',
-                runId: 'run8',
-                hypothesisId: 'H3',
-                location: 'script.js:30',
-                message: 'Window error',
-                data: {
-                    message: event.message,
-                    filename: event.filename,
-                    lineno: event.lineno,
-                    colno: event.colno,
-                    tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
-                },
-                timestamp: Date.now()
-            })
+            body: JSON.stringify(payload)
         }).catch(() => {});
+    } catch (e) {}
+    try {
+        fetch(`${window.location.origin}/api/admin/client-log`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Tg-Init-Data': tg?.initData || ''
+            },
+            body: JSON.stringify(payload)
+        }).catch(() => {});
+    } catch (e) {}
+}
+// #endregion
+
+// #region agent log
+window.addEventListener('error', (event) => {
+    try {
+        sendClientLog({
+            sessionId: 'debug-session',
+            runId: 'run8',
+            hypothesisId: 'H3',
+            location: 'script.js:30',
+            message: 'Window error',
+            data: {
+                message: event.message,
+                filename: event.filename,
+                lineno: event.lineno,
+                colno: event.colno,
+                tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null,
+                stack: event.error?.stack || null
+            },
+            timestamp: Date.now()
+        });
     } catch (e) {}
 });
 // #endregion
@@ -52,22 +71,18 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
     try {
         const reason = event.reason;
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: 'debug-session',
-                runId: 'run8',
-                hypothesisId: 'H2',
-                location: 'script.js:52',
-                message: 'Unhandled rejection',
-                data: {
-                    reason: reason ? (reason.message || String(reason)) : null,
-                    tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
-                },
-                timestamp: Date.now()
-            })
-        }).catch(() => {});
+        sendClientLog({
+            sessionId: 'debug-session',
+            runId: 'run8',
+            hypothesisId: 'H2',
+            location: 'script.js:52',
+            message: 'Unhandled rejection',
+            data: {
+                reason: reason ? (reason.message || String(reason)) : null,
+                tab: typeof currentAdminTab !== 'undefined' ? currentAdminTab : null
+            },
+            timestamp: Date.now()
+        });
     } catch (e) {}
 });
 // #endregion
@@ -901,19 +916,15 @@ async function loadAdminData() {
     try {
         console.log(`[DEBUG] Loading admin data for tab: ${currentAdminTab}`);
         // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: 'debug-session',
-                runId: 'run8',
-                hypothesisId: 'H1',
-                location: 'script.js:860',
-                message: 'loadAdminData start',
-                data: { tab: currentAdminTab },
-                timestamp: Date.now()
-            })
-        }).catch(() => {});
+        sendClientLog({
+            sessionId: 'debug-session',
+            runId: 'run8',
+            hypothesisId: 'H1',
+            location: 'script.js:860',
+            message: 'loadAdminData start',
+            data: { tab: currentAdminTab },
+            timestamp: Date.now()
+        });
         // #endregion
         
         if (currentAdminTab === 'broadcasts') {
@@ -937,23 +948,19 @@ async function loadAdminData() {
         
         console.log(`[DEBUG] Loaded ${adminItems.length} items for ${currentAdminTab}`);
         // #region agent log
-        fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                sessionId: 'debug-session',
-                runId: 'run8',
-                hypothesisId: 'H1',
-                location: 'script.js:885',
-                message: 'loadAdminData fetched',
-                data: {
-                    tab: currentAdminTab,
-                    isArray: Array.isArray(adminItems),
-                    length: Array.isArray(adminItems) ? adminItems.length : null
-                },
-                timestamp: Date.now()
-            })
-        }).catch(() => {});
+        sendClientLog({
+            sessionId: 'debug-session',
+            runId: 'run8',
+            hypothesisId: 'H1',
+            location: 'script.js:885',
+            message: 'loadAdminData fetched',
+            data: {
+                tab: currentAdminTab,
+                isArray: Array.isArray(adminItems),
+                length: Array.isArray(adminItems) ? adminItems.length : null
+            },
+            timestamp: Date.now()
+        });
         // #endregion
         renderAdminList();
     } catch (error) {
@@ -1503,25 +1510,21 @@ function renderAdminList() {
         // #region agent log
         try {
             const first = adminItems[0] || {};
-            fetch('http://127.0.0.1:7245/ingest/1a99addc-056e-429d-b318-75f0bb966d8b', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: 'debug-session',
-                    runId: 'run8',
-                    hypothesisId: 'H1',
-                    location: 'script.js:1420',
-                    message: 'renderAdminList broadcasts',
-                    data: {
-                        count: Array.isArray(adminItems) ? adminItems.length : null,
-                        keys: Object.keys(first || {}),
-                        hasMessage: Object.prototype.hasOwnProperty.call(first, 'message'),
-                        hasContent: Object.prototype.hasOwnProperty.call(first, 'content'),
-                        hasTitle: Object.prototype.hasOwnProperty.call(first, 'title')
-                    },
-                    timestamp: Date.now()
-                })
-            }).catch(() => {});
+            sendClientLog({
+                sessionId: 'debug-session',
+                runId: 'run8',
+                hypothesisId: 'H1',
+                location: 'script.js:1420',
+                message: 'renderAdminList broadcasts',
+                data: {
+                    count: Array.isArray(adminItems) ? adminItems.length : null,
+                    keys: Object.keys(first || {}),
+                    hasMessage: Object.prototype.hasOwnProperty.call(first, 'message'),
+                    hasContent: Object.prototype.hasOwnProperty.call(first, 'content'),
+                    hasTitle: Object.prototype.hasOwnProperty.call(first, 'title')
+                },
+                timestamp: Date.now()
+            });
         } catch (e) {}
         // #endregion
         listEl.innerHTML = adminItems.map(item => {

@@ -14,6 +14,49 @@ from datetime import datetime
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
+
+@router.post("/client-log")
+async def client_log(payload: Dict[str, Any], _: int = Depends(get_current_admin)):
+    """Принимает клиентские логи из webapp для отладки."""
+    try:
+        safe_payload = {
+            "sessionId": payload.get("sessionId"),
+            "runId": payload.get("runId"),
+            "hypothesisId": payload.get("hypothesisId"),
+            "location": payload.get("location"),
+            "message": payload.get("message"),
+            "timestamp": payload.get("timestamp"),
+            "data": {}
+        }
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        safe_payload["data"] = {
+            "message": data.get("message"),
+            "filename": data.get("filename"),
+            "lineno": data.get("lineno"),
+            "colno": data.get("colno"),
+            "tab": data.get("tab"),
+            "reason": data.get("reason"),
+            "stack": data.get("stack"),
+            "keys": data.get("keys"),
+            "count": data.get("count"),
+            "length": data.get("length"),
+            "isArray": data.get("isArray"),
+            "hasMessage": data.get("hasMessage"),
+            "hasContent": data.get("hasContent"),
+            "hasTitle": data.get("hasTitle")
+        }
+        log_line = json.dumps(safe_payload, ensure_ascii=False)
+        logger.info(f"CLIENT_DEBUG_LOG {log_line}")
+        try:
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                f.write(log_line + '\n')
+        except Exception:
+            pass
+        print(f"CLIENT_DEBUG_LOG {log_line}")
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error in client_log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Client log error")
 def _coerce_order(value):
     try:
         return int(value)
