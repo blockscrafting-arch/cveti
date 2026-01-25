@@ -158,6 +158,24 @@ async def delete_master(id: str, _: int = Depends(get_current_admin)):
 async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает мастера вверх или вниз по порядку"""
     try:
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H1",
+                "location": "admin.py:160",
+                "message": "Move master entry",
+                "data": {"id": id, "direction": direction},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         # Получаем текущий элемент
         current_res = await supabase.table("masters").select("*").eq("id", id).single().execute()
         current_order = current_res.data.get("order")
@@ -182,13 +200,38 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
 
         orders = [_coerce_order(item.get("order")) for item in all_items]
         unique_orders = len(set([o for o in orders if o is not None]))
+        normalized_orders = False
         if len(all_items) > 1 and unique_orders <= 1:
             await _normalize_orders("masters", all_items)
+            normalized_orders = True
             current_res = await supabase.table("masters").select("*").eq("id", id).single().execute()
             current_order = current_res.data.get("order") if current_res.data else None
             all_res = await supabase.table("masters").select("*").execute()
             all_items = all_res.data or []
             valid_items = [item for item in all_items if item.get("order") is not None]
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H2",
+                "location": "admin.py:196",
+                "message": "Move master normalize",
+                "data": {
+                    "normalized": normalized_orders,
+                    "unique_orders": unique_orders,
+                    "total_items": len(all_items),
+                    "current_order": current_order
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
 
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
@@ -213,6 +256,28 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             else:
                 target_res = type('obj', (object,), {'data': []})()
         
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H3",
+                "location": "admin.py:220",
+                "message": "Move master candidates",
+                "data": {
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         if not target_res.data:
             return {"status": "ok", "message": "Already at edge"}
         
@@ -292,6 +357,24 @@ async def delete_service(id: str, _: int = Depends(get_current_admin)):
 async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
     """Перемещает услугу вверх или вниз по порядку"""
     try:
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H1",
+                "location": "admin.py:320",
+                "message": "Move service entry",
+                "data": {"id": id, "direction": direction},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
         if not current_res.data:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -317,13 +400,38 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
 
         orders = [_coerce_order(item.get("order")) for item in all_items]
         unique_orders = len(set([o for o in orders if o is not None]))
+        normalized_orders = False
         if len(all_items) > 1 and unique_orders <= 1:
             await _normalize_orders("services", all_items)
+            normalized_orders = True
             current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
             current_order = current_res.data.get("order") if current_res.data else None
             all_res = await supabase.table("services").select("*").execute()
             all_items = all_res.data or []
             valid_items = [item for item in all_items if item.get("order") is not None]
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H2",
+                "location": "admin.py:352",
+                "message": "Move service normalize",
+                "data": {
+                    "normalized": normalized_orders,
+                    "unique_orders": unique_orders,
+                    "total_items": len(all_items),
+                    "current_order": current_order
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
 
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
@@ -343,6 +451,28 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             else:
                 target_res = type('obj', (object,), {'data': []})()
         
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run2",
+                "hypothesisId": "H3",
+                "location": "admin.py:370",
+                "message": "Move service candidates",
+                "data": {
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         if not target_res.data:
             return {"status": "ok", "message": "Already at edge"}
         
