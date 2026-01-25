@@ -118,7 +118,26 @@ async def update_setting(key: str, value: Any, setting_type: str = "string", upd
             }).execute()
         except Exception as e:
             error_str = str(e)
+            error_text = ""
+            response = getattr(e, "response", None)
+            if response is not None:
+                try:
+                    error_text = response.text or ""
+                except Exception:
+                    error_text = ""
+            if error_text:
+                try:
+                    parsed = json.loads(error_text)
+                    if isinstance(parsed, dict) and "message" in parsed:
+                        error_text = parsed.get("message") or error_text
+                except Exception:
+                    pass
+            needs_updated_by = False
             if "update_setting" in error_str and ("p_key, p_type, p_value" in error_str or "schema cache" in error_str or "PGRST202" in error_str):
+                needs_updated_by = True
+            if "update_setting" in error_text and ("p_key, p_type, p_value" in error_text or "p_updated_by" in error_text or "schema cache" in error_text or "PGRST202" in error_text):
+                needs_updated_by = True
+            if needs_updated_by:
                 rpc_variant = "p_updated_by"
                 updated_by_value = updated_by if updated_by is not None else 0
                 result = await supabase.rpc("update_setting", {

@@ -1025,7 +1025,21 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
             except Exception as insert_error:
                 last_error = insert_error
                 error_str = str(insert_error)
-                missing_col = _extract_missing_column(error_str)
+                error_text = ""
+                response = getattr(insert_error, "response", None)
+                if response is not None:
+                    try:
+                        error_text = response.text or ""
+                    except Exception:
+                        error_text = ""
+                if error_text:
+                    try:
+                        parsed = json.loads(error_text)
+                        if isinstance(parsed, dict) and "message" in parsed:
+                            error_text = parsed.get("message") or error_text
+                    except Exception:
+                        pass
+                missing_col = _extract_missing_column(error_text or error_str)
                 if missing_col and missing_col in pending_data:
                     pending_data.pop(missing_col, None)
                     # #region agent log
