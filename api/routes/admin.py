@@ -945,10 +945,56 @@ async def process_broadcast(broadcast_id: str):
             logger.error(f"Broadcast {broadcast_id} not found")
             return
         
-        broadcast = broadcast_res.data
-        message = broadcast["message"]
-        recipient_type = broadcast["recipient_type"]
+        broadcast = broadcast_res.data or {}
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run7",
+                "hypothesisId": "D1",
+                "location": "admin.py:928",
+                "message": "Process broadcast keys",
+                "data": {"keys": sorted(list(broadcast.keys()))},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
+        message = broadcast.get("message") or broadcast.get("content") or broadcast.get("title") or ""
+        recipient_type = broadcast.get("recipient_type", "all")
         image_url = broadcast.get("image_url")
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run7",
+                "hypothesisId": "D1",
+                "location": "admin.py:943",
+                "message": "Process broadcast resolved fields",
+                "data": {
+                    "message_len": len(message) if isinstance(message, str) else 0,
+                    "recipient_type": recipient_type,
+                    "has_image": bool(image_url)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            try:
+                with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False)
+                    f.write('\n')
+            except Exception:
+                pass
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
 
         # Обновляем статус на "sending"
         await _safe_broadcast_update(str(broadcast_id), {"status": "sending"})
