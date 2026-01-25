@@ -192,6 +192,7 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже в списке = увеличить свой order = найти соседа с БОЛЬШИМ order
+        candidates = []
         if direction == "up":
             # Ищем соседа сверху (order меньше текущего)
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") < current_order]
@@ -201,6 +202,37 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
                 target_res = type('obj', (object,), {'data': [target]})()
             else:
                 target_res = type('obj', (object,), {'data': []})()
+        # #region agent log
+        try:
+            orders = [item.get("order") for item in valid_items]
+            unique_orders = len(set(orders)) if orders else 0
+            payload = {
+                "location": "admin.py:214",
+                "message": "Move master candidate stats",
+                "data": {
+                    "id": id,
+                    "direction": direction,
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "unique_orders": unique_orders,
+                    "min_order": min(orders) if orders else None,
+                    "max_order": max(orders) if orders else None,
+                    "same_order_all": unique_orders == 1 if orders else False
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "D"
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+            logger.info(debug_line)
+            print(debug_line)
+        except Exception:
+            pass
+        # #endregion
         else:  # down
             # Ищем соседа снизу (order больше текущего)
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") > current_order]
@@ -364,6 +396,7 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
+        candidates = []
         if direction == "up":
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") < current_order]
             if candidates:
@@ -371,6 +404,37 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
                 target_res = type('obj', (object,), {'data': [target]})()
             else:
                 target_res = type('obj', (object,), {'data': []})()
+        # #region agent log
+        try:
+            orders = [item.get("order") for item in valid_items]
+            unique_orders = len(set(orders)) if orders else 0
+            payload = {
+                "location": "admin.py:342",
+                "message": "Move service candidate stats",
+                "data": {
+                    "id": id,
+                    "direction": direction,
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "unique_orders": unique_orders,
+                    "min_order": min(orders) if orders else None,
+                    "max_order": max(orders) if orders else None,
+                    "same_order_all": unique_orders == 1 if orders else False
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "D"
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+            logger.info(debug_line)
+            print(debug_line)
+        except Exception:
+            pass
+        # #endregion
         else:
             candidates = [item for item in valid_items if item.get("id") != id and item.get("order") is not None and item.get("order") > current_order]
             if candidates:
