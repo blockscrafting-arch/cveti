@@ -1002,23 +1002,6 @@ function initBotButtonsPanel() {
 
     if (addRowBtn) {
         addRowBtn.addEventListener('click', () => {
-            // #region agent log
-            try {
-                sendClientLog({
-                    sessionId: 'debug-session',
-                    runId: 'run11',
-                    hypothesisId: 'H7',
-                    location: 'script.js:1004',
-                    message: 'bot-buttons add row click',
-                    data: {
-                        tab: currentAdminTab,
-                        count: botButtonsState.rows.length,
-                        length: botButtonsState.extraRows.length
-                    },
-                    timestamp: Date.now()
-                });
-            } catch (e) {}
-            // #endregion
             addBotButtonsRow();
         });
     }
@@ -1031,24 +1014,6 @@ function initBotButtonsPanel() {
             } else if (botButtonsState.rows.length) {
                 targetRow = botButtonsState.rows[botButtonsState.rows.length - 1].rowNumber;
             }
-            // #region agent log
-            try {
-                sendClientLog({
-                    sessionId: 'debug-session',
-                    runId: 'run11',
-                    hypothesisId: 'H8',
-                    location: 'script.js:1016',
-                    message: 'bot-buttons add button click',
-                    data: {
-                        tab: currentAdminTab,
-                        count: targetRow,
-                        length: botButtonsState.rows.length,
-                        keys: [`selected:${botButtonsState.selectedId || 'none'}`]
-                    },
-                    timestamp: Date.now()
-                });
-            } catch (e) {}
-            // #endregion
             createBotButtonDraft(targetRow);
         });
     }
@@ -1122,13 +1087,10 @@ function renderBotButtonsPanel() {
             location: 'script.js:1079',
             message: 'renderBotButtonsPanel state',
             data: {
-                tab: currentAdminTab,
-                count: botButtonsState.rows.length,
-                length: Array.isArray(adminItems) ? adminItems.length : null,
-                keys: [
-                    `extra:${botButtonsState.extraRows.join(',') || 'none'}`,
-                    `selected:${botButtonsState.selectedId || 'none'}`
-                ]
+                rowsCount: botButtonsState.rows.length,
+                itemsCount: Array.isArray(adminItems) ? adminItems.length : null,
+                extraRows: botButtonsState.extraRows.length,
+                selectedId: botButtonsState.selectedId || null
             },
             timestamp: Date.now()
         });
@@ -1277,27 +1239,6 @@ function addBotButtonsRow() {
     if (!botButtonsState.extraRows.includes(nextRow)) {
         botButtonsState.extraRows.push(nextRow);
     }
-    // #region agent log
-    try {
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run11',
-            hypothesisId: 'H7',
-            location: 'script.js:1242',
-            message: 'bot-buttons add row state',
-            data: {
-                count: nextRow,
-                length: botButtonsState.extraRows.length,
-                keys: [
-                    `max:${maxRow}`,
-                    `rows:${rowNumbers.join(',') || 'none'}`,
-                    `extra:${botButtonsState.extraRows.join(',') || 'none'}`
-                ]
-            },
-            timestamp: Date.now()
-        });
-    } catch (e) {}
-    // #endregion
     renderBotButtonsPanel();
 }
 
@@ -1315,23 +1256,6 @@ function createBotButtonDraft(rowNumber) {
         is_admin_only: false,
         is_active: true
     };
-    // #region agent log
-    try {
-        sendClientLog({
-            sessionId: 'debug-session',
-            runId: 'run11',
-            hypothesisId: 'H8',
-            location: 'script.js:1258',
-            message: 'bot-buttons draft created',
-            data: {
-                count: rowNumber,
-                length: defaultOrder,
-                keys: [`rows:${botButtonsState.rows.length}`]
-            },
-            timestamp: Date.now()
-        });
-    } catch (e) {}
-    // #endregion
     renderBotButtonsPanel();
 }
 
@@ -2274,28 +2198,6 @@ function renderFormFields(item = {}) {
     }
     
     fieldsEl.innerHTML = html;
-
-    // #region agent log
-    try {
-        if (currentAdminTab === 'broadcasts') {
-            const messageLen = String(safe.message || '').length;
-            sendClientLog({
-                sessionId: 'debug-session',
-                runId: 'run12',
-                hypothesisId: 'H9',
-                location: 'script.js:2201',
-                message: 'broadcast form render',
-                data: {
-                    tab: currentAdminTab,
-                    length: messageLen,
-                    count: item && item.id ? 1 : 0,
-                    keys: [`mode:${item && item.id ? 'edit' : 'new'}`]
-                },
-                timestamp: Date.now()
-            });
-        }
-    } catch (e) {}
-    // #endregion
     
     // Добавляем обработчики для загрузки файлов
     setupImageUploadHandlers();
@@ -2325,11 +2227,8 @@ function renderFormFields(item = {}) {
                         location: 'script.js:2068',
                         message: 'broadcast message focus',
                         data: {
-                            length: messageEl.value.length,
-                            keys: [
-                                `disabled:${!!messageEl.disabled}`,
-                                `readOnly:${!!messageEl.readOnly}`
-                            ]
+                            disabled: !!messageEl.disabled,
+                            readOnly: !!messageEl.readOnly
                         },
                         timestamp: Date.now()
                     });
