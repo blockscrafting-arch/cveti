@@ -13,6 +13,8 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
+log_path = LOG_PATH
 
 # Глобальный Bot экземпляр для рассылок
 _broadcast_bot: Bot = None
@@ -160,6 +162,30 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         # Получаем все записи для поиска соседа
         all_res = await supabase.table("masters").select("*").execute()
         valid_items = [item for item in all_res.data if item.get("order") is not None]
+        # #region agent log
+        try:
+            payload = {
+                "location": "admin.py:166",
+                "message": "Move master candidates",
+                "data": {
+                    "id": id,
+                    "direction": direction,
+                    "current_order": current_order,
+                    "total_items": len(all_res.data) if all_res.data else 0,
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B"
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
@@ -200,6 +226,28 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         
         # Проверяем, что данные действительно обновились
         verify_res = await supabase.table("masters").select("id,order").in_("id", [id, target["id"]]).execute()
+        # #region agent log
+        try:
+            payload = {
+                "location": "admin.py:210",
+                "message": "Move master verify",
+                "data": {
+                    "id": id,
+                    "target_id": target.get("id"),
+                    "verify_data": verify_res.data
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "C"
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         
         return {"status": "ok"}
     except HTTPException:
@@ -283,6 +331,30 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         # Получаем все записи для поиска соседа
         all_res = await supabase.table("services").select("*").execute()
         valid_items = [item for item in all_res.data if item.get("order") is not None]
+        # #region agent log
+        try:
+            payload = {
+                "location": "admin.py:294",
+                "message": "Move service candidates",
+                "data": {
+                    "id": id,
+                    "direction": direction,
+                    "current_order": current_order,
+                    "total_items": len(all_res.data) if all_res.data else 0,
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B"
+            }
+            with open(LOG_PATH, 'a', encoding='utf-8') as f:
+                json.dump(payload, f, ensure_ascii=False)
+                f.write('\n')
+            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
