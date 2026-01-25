@@ -176,6 +176,21 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         except Exception:
             pass
         # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H1",
+                "location": "admin.py:178",
+                "message": "Move master entry (stdout-only)",
+                "data": {"id": id, "direction": direction},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         # Получаем текущий элемент
         current_res = await supabase.table("masters").select("*").eq("id", id).single().execute()
         current_order = current_res.data.get("order")
@@ -232,6 +247,26 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         except Exception:
             pass
         # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H2",
+                "location": "admin.py:236",
+                "message": "Move master normalize (stdout-only)",
+                "data": {
+                    "normalized": normalized_orders,
+                    "unique_orders": unique_orders,
+                    "total_items": len(all_items),
+                    "current_order": current_order
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
 
         # Определяем направление и новый порядок
         # "up" = переместить выше в списке = уменьшить свой order = найти соседа с МЕНЬШИМ order
@@ -274,6 +309,25 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             with open(LOG_PATH, 'a', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H3",
+                "location": "admin.py:282",
+                "message": "Move master candidates (stdout-only)",
+                "data": {
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
             print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
         except Exception:
             pass
@@ -375,6 +429,21 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         except Exception:
             pass
         # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H1",
+                "location": "admin.py:377",
+                "message": "Move service entry (stdout-only)",
+                "data": {"id": id, "direction": direction},
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
         current_res = await supabase.table("services").select("*").eq("id", id).single().execute()
         if not current_res.data:
             raise HTTPException(status_code=404, detail="Service not found")
@@ -432,6 +501,26 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         except Exception:
             pass
         # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H2",
+                "location": "admin.py:435",
+                "message": "Move service normalize (stdout-only)",
+                "data": {
+                    "normalized": normalized_orders,
+                    "unique_orders": unique_orders,
+                    "total_items": len(all_items),
+                    "current_order": current_order
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
 
         # "up" = переместить выше = уменьшить свой order = найти соседа с МЕНЬШИМ order
         # "down" = переместить ниже = увеличить свой order = найти соседа с БОЛЬШИМ order
@@ -469,6 +558,25 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             with open(LOG_PATH, 'a', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
+            print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+        except Exception:
+            pass
+        # #endregion
+        # #region agent log
+        try:
+            payload = {
+                "sessionId": "debug-session",
+                "runId": "run3",
+                "hypothesisId": "H3",
+                "location": "admin.py:454",
+                "message": "Move service candidates (stdout-only)",
+                "data": {
+                    "current_order": current_order,
+                    "candidate_count": len(candidates),
+                    "valid_count": len(valid_items)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
             print(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
         except Exception:
             pass
