@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
 
 @router.post("/client-log")
-async def client_log(payload: Dict[str, Any], _: int = Depends(get_current_admin)):
+async def client_log(payload: Dict[str, Any]):
     """Принимает клиентские логи из webapp для отладки."""
     try:
         safe_payload = {
