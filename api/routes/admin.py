@@ -967,6 +967,14 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
             else:
                 title = ""
         broadcast_data["title"] = title or "Рассылка"
+        content = data.get("content")
+        if not content:
+            message = data.get("message", "")
+            if isinstance(message, str):
+                content = message.strip()
+            else:
+                content = ""
+        broadcast_data["content"] = content or broadcast_data["title"]
         
         # Добавляем image_url если указан
         image_url = data.get("image_url")
