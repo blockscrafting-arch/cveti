@@ -1545,7 +1545,7 @@ function renderAdminList() {
             const status = String(item.status || '');
             const statusClass = statusColors[status] || 'bg-stone-100 text-stone-600';
             const statusLabel = statusText[status] || escapeHtml(status);
-            const message = String(item.message || '');
+            const message = String(item.message || item.content || item.title || '');
             const shortMessage = message.length > 100 ? `${message.slice(0, 100)}...` : message;
             const safeMessage = escapeHtml(shortMessage);
             const imageUrl = safeUrl(item.image_url);
@@ -1920,7 +1920,7 @@ function renderFormFields(item = {}) {
         endDate: escapeAttr(item.end_date || ''),
         actionUrl: escapeAttr(item.action_url || ''),
         actionText: escapeAttr(item.action_text || 'Записаться'),
-        message: escapeHtml(item.message || ''),
+        message: escapeHtml(item.message || item.content || item.title || ''),
         recipientType: String(item.recipient_type || ''),
         recipientIds: escapeAttr(JSON.stringify(item.recipient_ids || [])),
         filterBalanceMin: escapeAttr(item.filter_balance_min || ''),
@@ -2835,7 +2835,7 @@ async function viewBroadcast(id) {
         const titleEl = document.getElementById('modal-title');
         if (!modal || !container || !fieldsEl || !titleEl) return;
 
-        const message = escapeHtml(broadcast.message || '');
+        const message = escapeHtml(broadcast.message || broadcast.content || broadcast.title || '');
         const imageUrl = safeUrl(broadcast.image_url);
         const safeRecipientInfo = escapeHtml(recipientInfo);
         const safeStatus = escapeHtml(broadcast.status || '');
