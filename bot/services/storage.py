@@ -1,55 +1,93 @@
 """
-Сервис для работы с Supabase Storage через S3 API
+Сервис для работы с Supabase Storage через нативный клиент Supabase (вместо S3)
 """
-import aioboto3
-from bot.config import settings
-from typing import Optional
 import logging
-import uuid
-from datetime import datetime
+from bot.config import settings
+from bot.services.supabase_client import supabase
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 class StorageService:
-    """Сервис для загрузки файлов в Supabase Storage через S3 API"""
+    """Сервис для загрузки файлов в Supabase Storage"""
     
     def __init__(self):
         self.bucket = settings.SUPABASE_STORAGE_BUCKET
-        self.endpoint_url = settings.SUPABASE_STORAGE_S3_ENDPOINT
-        self.region = settings.SUPABASE_STORAGE_S3_REGION
-        self.access_key = settings.SUPABASE_STORAGE_ACCESS_KEY
-        self.secret_key = settings.SUPABASE_STORAGE_SECRET_KEY
         self.public_url_base = settings.SUPABASE_URL.rstrip('/')
         
-        # Валидация обязательных параметров
-        if not self.endpoint_url:
-            logger.warning("SUPABASE_STORAGE_S3_ENDPOINT not set, uploads may fail")
-        if not self.access_key:
-            logger.warning("SUPABASE_STORAGE_ACCESS_KEY not set, uploads may fail")
-        if not self.secret_key:
-            logger.warning("SUPABASE_STORAGE_SECRET_KEY not set, uploads may fail")
         if not self.bucket:
             logger.warning("SUPABASE_STORAGE_BUCKET not set, uploads may fail")
-        
-        # Создаем сессию aioboto3
-        self.session = aioboto3.Session()
     
     def _get_public_url(self, path: str) -> str:
         """Получить публичный URL для файла"""
-        return f"{self.public_url_base}/storage/v1/object/public/{self.bucket}/{path}"
+        # Используем метод get_public_url из клиента, если возможно, или формируем вручную
+        try:
+            return supabase.storage.from_(self.bucket).get_public_url(path)
+        except:
+            return f"{self.public_url_base}/storage/v1/object/public/{self.bucket}/{path}"
     
     def _generate_file_path(self, filename: str, folder: str = "images") -> str:
         """Генерирует уникальный путь для файла"""
-        # Получаем расширение файла
+        import uuid
+        from datetime import datetime
+        
         ext = filename.split('.')[-1] if '.' in filename else 'jpg'
-        # Генерируем уникальное имя: folder/YYYY-MM-DD/uuid.ext
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        unique_id = str(uuid.uuid4())
-        return f"{folder}/{date_str}/{unique_id}.{ext}"
+        unique_id = str(uuid.uuid4())[:8]
+        timestamp = int(datetime.now().timestamp())
+        
+        # Очищаем folder от лишних слешей
+        folder = folder.strip('/')
+        
+        return f"{folder}/{timestamp}_{unique_id}.{ext}"
+
+    async def upload_file(self, file_content: bytes, filename: str, folder: str = "images") -> Optional[str]:
+        """
+        Загружает файл в Supabase Storage
+        
+        Args:
+            file_content: Содержимое файла в байтах
+            filename: Имя файла
+            folder: Папка для сохранения (по умолчанию "images")
+            
+        Returns:
+            Публичный URL загруженного файла или None при ошибке
+        """
+        try:
+            file_path = self._generate_file_path(filename, folder)
+            
+            # Загружаем через нативный клиент Supabase
+            # Метод upload синхронный в текущей версии supabase-py, но выполняется быстро
+            # При необходимости можно обернуть в run_in_executor, но для небольших файлов ок
+            try:
+                res = supabase.storage.from_(self.bucket).upload(
+                    path=file_path,
+                    file=file_content,
+                    file_options={"content-type": self._get_content_type(filename), "upsert": "true"}
+                )
+                
+                # Проверяем ответ (в разных версиях может быть разным)
+                if hasattr(res, 'error') and res.error:
+                    raise Exception(str(res.error))
+                    
+            except Exception as upload_error:
+                error_str = str(upload_error)
+                # Если бакета нет - пробуем создать (хотя лучше это делать через миграции)
+                if "Bucket not found" in error_str or "The resource was not found" in error_str:
+                    logger.error(f"Bucket '{self.bucket}' not found. Please run the SQL creation script.")
+                raise upload_error
+
+            public_url = self._get_public_url(file_path)
+            logger.info(f"File uploaded successfully: {file_path}")
+            return public_url
+                
+        except Exception as e:
+            logger.error(f"Error uploading file to Supabase Storage: {e}", exc_info=True)
+            return None
     
     def _get_content_type(self, filename: str) -> str:
         """Определяет Content-Type по расширению файла"""
-        ext = filename.split('.')[-1].lower() if '.' in filename else 'jpg'
+        ext = filename.split('.')[-1].lower() if '.' in filename else ''
+        
         content_types = {
             'jpg': 'image/jpeg',
             'jpeg': 'image/jpeg',
@@ -57,115 +95,28 @@ class StorageService:
             'gif': 'image/gif',
             'webp': 'image/webp',
             'svg': 'image/svg+xml',
-            'bmp': 'image/bmp',
+            'pdf': 'application/pdf'
         }
-        return content_types.get(ext, 'image/jpeg')
-    
-    async def upload_file(self, file_content: bytes, filename: str, folder: str = "images") -> Optional[str]:
-        """
-        Загружает файл в Supabase Storage через S3 API
         
-        Args:
-            file_content: Содержимое файла в байтах
-            filename: Оригинальное имя файла
-            folder: Папка для хранения (по умолчанию "images")
-        
-        Returns:
-            Публичный URL файла или None в случае ошибки
-        """
-        try:
-            # Проверяем конфигурацию
-            if not self.endpoint_url or not self.access_key or not self.secret_key or not self.bucket:
-                logger.error("Storage configuration incomplete. Check SUPABASE_STORAGE_* environment variables.")
-                return None
-            
-            # Генерируем путь для файла
-            file_path = self._generate_file_path(filename, folder)
-            
-            # Определяем Content-Type
-            content_type = self._get_content_type(filename)
-            
-            # Загружаем через S3 API
-            async with self.session.client(
-                's3',
-                endpoint_url=self.endpoint_url,
-                region_name=self.region,
-                aws_access_key_id=self.access_key,
-                aws_secret_access_key=self.secret_key
-            ) as s3:
-                try:
-                    await s3.put_object(
-                        Bucket=self.bucket,
-                        Key=file_path,
-                        Body=file_content,
-                        ContentType=content_type
-                        # ACL не нужен, так как bucket уже публичный
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    if "NoSuchBucket" in error_msg or "Bucket not found" in error_msg:
-                        logger.error(f"Storage bucket '{self.bucket}' does not exist in Supabase Storage. Please create it in Supabase Dashboard: Storage -> Create bucket -> Name: '{self.bucket}' -> Public bucket")
-                        raise Exception(f"Storage bucket '{self.bucket}' not found. Please create it in Supabase Dashboard.")
-                    raise
-            
-            public_url = self._get_public_url(file_path)
-            logger.info(f"File uploaded successfully via S3: {file_path}")
-            return public_url
-                
-        except Exception as e:
-            logger.error(f"Error uploading file to Supabase Storage via S3: {e}", exc_info=True)
-            return None
+        return content_types.get(ext, 'application/octet-stream')
     
     async def delete_file(self, file_path: str) -> bool:
-        """
-        Удаляет файл из Supabase Storage через S3 API
-        
-        Args:
-            file_path: Путь к файлу (относительно bucket)
-        
-        Returns:
-            True если успешно, False в случае ошибки
-        """
+        """Удаляет файл из Supabase Storage"""
         try:
-            # Проверяем конфигурацию
-            if not self.endpoint_url or not self.access_key or not self.secret_key or not self.bucket:
-                logger.error("Storage configuration incomplete. Check SUPABASE_STORAGE_* environment variables.")
-                return False
-            
-            async with self.session.client(
-                's3',
-                endpoint_url=self.endpoint_url,
-                region_name=self.region,
-                aws_access_key_id=self.access_key,
-                aws_secret_access_key=self.secret_key
-            ) as s3:
-                await s3.delete_object(
-                    Bucket=self.bucket,
-                    Key=file_path
-                )
-            
-            logger.info(f"File deleted successfully via S3: {file_path}")
+            supabase.storage.from_(self.bucket).remove([file_path])
             return True
-                
         except Exception as e:
-            logger.error(f"Error deleting file from Supabase Storage via S3: {e}", exc_info=True)
+            logger.error(f"Error deleting file: {e}", exc_info=True)
             return False
     
     def extract_path_from_url(self, url: str) -> Optional[str]:
-        """
-        Извлекает путь к файлу из публичного URL
-        
-        Args:
-            url: Публичный URL файла
-        
-        Returns:
-            Путь к файлу или None
-        """
+        """Извлекает путь к файлу из публичного URL"""
         try:
-            # Формат URL: {SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}
-            prefix = f"{self.public_url_base}/storage/v1/object/public/{self.bucket}/"
-            if url.startswith(prefix):
-                return url[len(prefix):]
+            # Пытаемся найти часть после имени бакета
+            if self.bucket in url:
+                parts = url.split(f"/{self.bucket}/")
+                if len(parts) > 1:
+                    return parts[1]
             return None
         except Exception:
             return None
