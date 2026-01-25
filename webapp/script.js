@@ -1935,6 +1935,27 @@ function renderFormFields(item = {}) {
         isAdminOnly: !!item.is_admin_only
     };
 
+    // #region agent log
+    try {
+        if (currentAdminTab === 'broadcasts') {
+            sendClientLog({
+                sessionId: 'debug-session',
+                runId: 'run9',
+                hypothesisId: 'H4',
+                location: 'script.js:1918',
+                message: 'renderFormFields broadcasts',
+                data: {
+                    hasMessage: Object.prototype.hasOwnProperty.call(item, 'message'),
+                    hasContent: Object.prototype.hasOwnProperty.call(item, 'content'),
+                    hasTitle: Object.prototype.hasOwnProperty.call(item, 'title'),
+                    messageLen: safe.message.length
+                },
+                timestamp: Date.now()
+            });
+        }
+    } catch (e) {}
+    // #endregion
+
     if (currentAdminTab === 'users') {
         html = `
             <div>
@@ -2700,6 +2721,24 @@ async function handleAdminSubmit(e) {
         } else {
             data.recipient_ids = [];
         }
+
+        // #region agent log
+        try {
+            const messageValue = formData.get('message');
+            sendClientLog({
+                sessionId: 'debug-session',
+                runId: 'run9',
+                hypothesisId: 'H5',
+                location: 'script.js:2588',
+                message: 'handleAdminSubmit broadcasts',
+                data: {
+                    messageLen: messageValue ? String(messageValue).length : 0,
+                    recipientType: data.recipient_type
+                },
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+        // #endregion
         
         if (data.recipient_type === 'by_balance') {
             const min = formData.get('filter_balance_min');
