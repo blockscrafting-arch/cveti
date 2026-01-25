@@ -156,6 +156,122 @@ class YClientsAPI:
         logger.debug(f"No loyalty info found for client_id={client_id} in company_id={self.company_id}")
         return None
 
+    def _format_visit_status(self, raw: Dict[str, Any]) -> str:
+        if raw.get("deleted") or raw.get("canceled"):
+            return "Отменено"
+        attendance = raw.get("attendance")
+        if attendance is None:
+            attendance = raw.get("visit_attendance")
+        if isinstance(attendance, str) and attendance.lstrip("-").isdigit():
+            attendance = int(attendance)
+        if attendance == 2:
+            return "Подтверждено"
+        if attendance == 1:
+            return "Визит состоялся"
+        if attendance == 0:
+            return "Ожидается"
+        if attendance == -1:
+            return "Не пришли"
+        if raw.get("confirmed") is False:
+            return "Не подтверждено"
+        return "Запись"
+
+    def _normalize_visit(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        services_titles: List[str] = []
+        services_total = None
+        services = raw.get("services") or []
+        if isinstance(services, list):
+            for service in services:
+                if not isinstance(service, dict):
+                    continue
+                title = service.get("title") or service.get("name")
+                if title:
+                    services_titles.append(str(title))
+                cost = service.get("cost")
+                if cost is None:
+                    cost = service.get("first_cost")
+                if cost is None:
+                    cost = service.get("manual_cost")
+                amount = service.get("amount", 1)
+                if cost is not None and not isinstance(cost, bool):
+                    try:
+                        cost_value = float(cost)
+                        amount_value = float(amount) if amount is not None else 1.0
+                        services_total = (services_total or 0) + cost_value * amount_value
+                    except (ValueError, TypeError):
+                        pass
+
+        amount = None
+        amount_candidates = [
+            raw.get("amount"),
+            raw.get("sum"),
+            raw.get("total_cost"),
+            raw.get("cost"),
+            raw.get("prepaid"),
+            raw.get("paid_full")
+        ]
+        for candidate in amount_candidates:
+            if candidate is None or isinstance(candidate, bool):
+                continue
+            try:
+                amount = float(candidate)
+                if amount <= 0:
+                    amount = None
+                    continue
+                break
+            except (ValueError, TypeError):
+                continue
+        if amount is None and services_total is not None:
+            amount = services_total
+
+        staff = raw.get("staff") or {}
+        master = None
+        if isinstance(staff, dict):
+            master = staff.get("name") or staff.get("title")
+        if not master:
+            master = raw.get("staff_name")
+
+        visit_datetime = raw.get("datetime") or raw.get("date") or raw.get("create_date")
+
+        return {
+            "item_type": "visit",
+            "visit_id": raw.get("id") or raw.get("visit_id"),
+            "visit_datetime": visit_datetime,
+            "services": services_titles,
+            "master": master,
+            "amount": amount,
+            "status": self._format_visit_status(raw)
+        }
+
+    async def get_client_visits(self, client_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Получает историю визитов клиента и нормализует данные для UI."""
+        if not client_id:
+            return []
+
+        params = {
+            "client_id": client_id,
+            "count": limit,
+            "page": 1
+        }
+        result = await self._request("GET", f"records/{self.company_id}", params=params)
+        if not result:
+            return []
+
+        raw_visits = []
+        if isinstance(result, dict):
+            raw_visits = result.get("data") or []
+        elif isinstance(result, list):
+            raw_visits = result
+
+        if not isinstance(raw_visits, list):
+            return []
+
+        normalized = []
+        for visit in raw_visits:
+            if isinstance(visit, dict):
+                normalized.append(self._normalize_visit(visit))
+        return normalized
+
     async def get_companies_list(self) -> Optional[List[Dict[str, Any]]]:
         """
         Получает список компаний (филиалов), доступных для партнера.

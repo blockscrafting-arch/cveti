@@ -2,6 +2,7 @@ from fastapi import APIRouter, Header, HTTPException
 from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import get_user_available_balance, sync_user_with_yclients
+from bot.services.yclients_api import yclients
 from bot.config import settings
 from typing import Optional
 import logging
@@ -69,11 +70,30 @@ async def get_app_profile(x_tg_init_data: Optional[str] = Header(None)):
             logger.error(f"Database error fetching transactions: {e}", exc_info=True)
             # Возвращаем профиль без истории, если транзакции не загрузились
             tx_res = type('obj', (object,), {'data': []})()
+
+        # 4. Получаем историю визитов из YClients
+        visits = []
+        try:
+            yclients_id = user.get("yclients_id")
+            if not yclients_id and user.get("phone"):
+                client = await yclients.get_client_by_phone(user["phone"])
+                if client and client.get("id"):
+                    yclients_id = client["id"]
+                    try:
+                        await supabase.table("users").update({"yclients_id": yclients_id}).eq("id", user["id"]).execute()
+                    except Exception as update_err:
+                        logger.warning(f"Could not update yclients_id for user {user['id']}: {update_err}")
+
+            if yclients_id:
+                visits = await yclients.get_client_visits(yclients_id, limit=10)
+        except Exception as e:
+            logger.warning(f"Could not fetch visits from YClients: {e}")
         
         return {
             "user": user,
             "is_admin": is_admin,
-            "history": tx_res.data if hasattr(tx_res, 'data') else []
+            "history": tx_res.data if hasattr(tx_res, 'data') else [],
+            "visits": visits
         }
     except HTTPException:
         raise
