@@ -4,6 +4,7 @@
 import logging
 import json
 from datetime import datetime
+import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
 from typing import Optional
@@ -17,6 +18,10 @@ class StorageService:
     def __init__(self):
         self.bucket = settings.SUPABASE_STORAGE_BUCKET
         self.public_url_base = settings.SUPABASE_URL.rstrip('/')
+        self.s3_endpoint = settings.SUPABASE_STORAGE_S3_ENDPOINT
+        self.s3_region = settings.SUPABASE_STORAGE_S3_REGION
+        self.s3_access_key = settings.SUPABASE_STORAGE_ACCESS_KEY
+        self.s3_secret_key = settings.SUPABASE_STORAGE_SECRET_KEY
         
         if not self.bucket:
             logger.warning("SUPABASE_STORAGE_BUCKET not set, uploads may fail")
@@ -67,7 +72,8 @@ class StorageService:
                         "byte_len": len(file_content) if file_content else 0,
                         "bucket": self.bucket,
                         "supabase_type": type(supabase).__name__,
-                        "has_storage_attr": hasattr(supabase, "storage")
+                        "has_storage_attr": hasattr(supabase, "storage"),
+                        "s3_configured": bool(self.s3_endpoint and self.s3_access_key and self.s3_secret_key)
                     },
                     "timestamp": int(datetime.now().timestamp() * 1000),
                     "sessionId": "debug-session",
@@ -77,32 +83,46 @@ class StorageService:
                 with open(LOG_PATH, 'a', encoding='utf-8') as f:
                     json.dump(payload, f, ensure_ascii=False)
                     f.write('\n')
-                logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+                logger.info(debug_line)
+                print(debug_line)
             except Exception:
                 pass
             # #endregion
             file_path = self._generate_file_path(filename, folder)
             
-            # Загружаем через нативный клиент Supabase
-            # Метод upload синхронный в текущей версии supabase-py, но выполняется быстро
-            # При необходимости можно обернуть в run_in_executor, но для небольших файлов ок
-            try:
-                res = supabase.storage.from_(self.bucket).upload(
-                    path=file_path,
-                    file=file_content,
-                    file_options={"content-type": self._get_content_type(filename), "upsert": "true"}
-                )
-                
-                # Проверяем ответ (в разных версиях может быть разным)
-                if hasattr(res, 'error') and res.error:
-                    raise Exception(str(res.error))
-                    
-            except Exception as upload_error:
-                error_str = str(upload_error)
-                # Если бакета нет - пробуем создать (хотя лучше это делать через миграции)
-                if "Bucket not found" in error_str or "The resource was not found" in error_str:
-                    logger.error(f"Bucket '{self.bucket}' not found. Please run the SQL creation script.")
-                raise upload_error
+            content_type = self._get_content_type(filename)
+            # Предпочитаем S3 API (aioboto3), если настроены креды
+            if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
+                session = aioboto3.Session()
+                async with session.client(
+                    "s3",
+                    endpoint_url=self.s3_endpoint,
+                    region_name=self.s3_region,
+                    aws_access_key_id=self.s3_access_key,
+                    aws_secret_access_key=self.s3_secret_key
+                ) as s3:
+                    await s3.put_object(
+                        Bucket=self.bucket,
+                        Key=file_path,
+                        Body=file_content,
+                        ContentType=content_type
+                    )
+            else:
+                # Фоллбек на нативный клиент Supabase (если есть storage)
+                try:
+                    res = supabase.storage.from_(self.bucket).upload(
+                        path=file_path,
+                        file=file_content,
+                        file_options={"content-type": content_type, "upsert": "true"}
+                    )
+                    if hasattr(res, 'error') and res.error:
+                        raise Exception(str(res.error))
+                except Exception as upload_error:
+                    error_str = str(upload_error)
+                    if "Bucket not found" in error_str or "The resource was not found" in error_str:
+                        logger.error(f"Bucket '{self.bucket}' not found. Please run the SQL creation script.")
+                    raise upload_error
 
             public_url = self._get_public_url(file_path)
             # #region agent log
@@ -122,7 +142,9 @@ class StorageService:
                 with open(LOG_PATH, 'a', encoding='utf-8') as f:
                     json.dump(payload, f, ensure_ascii=False)
                     f.write('\n')
-                logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+                logger.info(debug_line)
+                print(debug_line)
             except Exception:
                 pass
             # #endregion
@@ -152,7 +174,18 @@ class StorageService:
     async def delete_file(self, file_path: str) -> bool:
         """Удаляет файл из Supabase Storage"""
         try:
-            supabase.storage.from_(self.bucket).remove([file_path])
+            if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
+                session = aioboto3.Session()
+                async with session.client(
+                    "s3",
+                    endpoint_url=self.s3_endpoint,
+                    region_name=self.s3_region,
+                    aws_access_key_id=self.s3_access_key,
+                    aws_secret_access_key=self.s3_secret_key
+                ) as s3:
+                    await s3.delete_object(Bucket=self.bucket, Key=file_path)
+            else:
+                supabase.storage.from_(self.bucket).remove([file_path])
             return True
         except Exception as e:
             logger.error(f"Error deleting file: {e}", exc_info=True)

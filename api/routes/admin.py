@@ -182,7 +182,9 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             with open(LOG_PATH, 'a', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
-            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+            logger.info(debug_line)
+            print(debug_line)
         except Exception:
             pass
         # #endregion
@@ -244,7 +246,9 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
             with open(LOG_PATH, 'a', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
-            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+            logger.info(debug_line)
+            print(debug_line)
         except Exception:
             pass
         # #endregion
@@ -351,7 +355,9 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
             with open(LOG_PATH, 'a', encoding='utf-8') as f:
                 json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
-            logger.info(f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}")
+            debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+            logger.info(debug_line)
+            print(debug_line)
         except Exception:
             pass
         # #endregion
@@ -475,8 +481,24 @@ async def move_promotion(id: str, direction: str = Query(..., pattern="^(up|down
         # #region agent log
         try:
             with open(log_path, 'a', encoding='utf-8') as f:
-                json.dump({"location":"admin.py:505","message":"Valid promotions found","data":{"total_items":len(all_res.data) if all_res.data else 0,"valid_count":len(valid_items),"current_order":current_order},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}, f, ensure_ascii=False)
+                payload = {
+                    "location": "admin.py:505",
+                    "message": "Valid promotions found",
+                    "data": {
+                        "total_items": len(all_res.data) if all_res.data else 0,
+                        "valid_count": len(valid_items),
+                        "current_order": current_order
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "C"
+                }
+                json.dump(payload, f, ensure_ascii=False)
                 f.write('\n')
+                debug_line = f"DEBUG_LOG {json.dumps(payload, ensure_ascii=False)}"
+                logger.info(debug_line)
+                print(debug_line)
         except: pass
         # #endregion
         
