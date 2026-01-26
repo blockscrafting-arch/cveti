@@ -8,30 +8,6 @@ from bot.dispatcher import dp
 from aiogram import Bot
 from aiogram.types import Update
 import logging
-import json
-import time
-
-DEBUG_LOG_PATHS = [
-    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
-    "/app/debug.log",
-    "/tmp/debug.log"
-]
-
-def _debug_log(payload: dict):
-    try:
-        payload.setdefault("sessionId", "debug-session")
-        payload.setdefault("runId", "run1")
-        payload["timestamp"] = int(time.time() * 1000)
-        line = json.dumps(payload, ensure_ascii=False)
-        for log_path in DEBUG_LOG_PATHS:
-            try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-                break
-            except Exception:
-                continue
-    except Exception:
-        pass
 
 router = APIRouter(prefix="/webhook", tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -207,20 +183,6 @@ async def telegram_webhook(request: Request):
 
         print(f"[tg_webhook] entry id={update_id} type={update_type} chat_id={chat_id} text={update_data.get('message', {}).get('text')}")
 
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H1",
-            "location": "api/routes/webhooks.py:telegram_webhook.entry",
-            "message": "webhook entry",
-            "data": {
-                "has_bot": _telegram_bot is not None,
-                "update_type": update_type,
-                "has_text": bool(update_data.get("message", {}).get("text")),
-                "is_start": update_data.get("message", {}).get("text", "").startswith("/start")
-            }
-        })
-        # endregion
-
         # Создаем объект Update из данных с контекстом бота
         update = Update.model_validate(update_data, context={"bot": _telegram_bot})
         
@@ -229,31 +191,10 @@ async def telegram_webhook(request: Request):
         await dp.feed_update(_telegram_bot, update)
         print(f"[tg_webhook] dispatched id={update_id} type={update_type}")
 
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H2",
-            "location": "api/routes/webhooks.py:telegram_webhook.feed_update",
-            "message": "feed_update ok",
-            "data": {
-                "update_type": update_type
-            }
-        })
-        # endregion
-        
         logger.debug(f"Telegram webhook processed: update_id={update.update_id}")
         return {"ok": True}
         
     except Exception as e:
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H2",
-            "location": "api/routes/webhooks.py:telegram_webhook.error",
-            "message": "webhook error",
-            "data": {
-                "error_type": type(e).__name__
-            }
-        })
-        # endregion
         logger.error(f"Error processing Telegram webhook: {e}", exc_info=True)
         # Telegram ожидает {"ok": true} даже при ошибках, иначе будет повторять запрос
         return {"ok": False}

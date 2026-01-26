@@ -4,30 +4,6 @@ from bot.keyboards import get_registration_keyboard, get_main_menu
 from bot.services.supabase_client import supabase
 from bot.config import settings
 import logging
-import json
-import time
-
-DEBUG_LOG_PATHS = [
-    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
-    "/app/debug.log",
-    "/tmp/debug.log"
-]
-
-def _debug_log(payload: dict):
-    try:
-        payload.setdefault("sessionId", "debug-session")
-        payload.setdefault("runId", "run1")
-        payload["timestamp"] = int(time.time() * 1000)
-        line = json.dumps(payload, ensure_ascii=False)
-        for log_path in DEBUG_LOG_PATHS:
-            try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-                break
-            except Exception:
-                continue
-    except Exception:
-        pass
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -38,19 +14,6 @@ async def cmd_start(message: types.Message):
     
     print(f"[tg_start] entry user={tg_id} text={message.text} contact={bool(message.contact)}")
 
-    # region agent log
-    _debug_log({
-        "hypothesisId": "H3",
-        "location": "bot/handlers/start.py:cmd_start.entry",
-        "message": "start handler entry",
-        "data": {
-            "has_text": bool(message.text),
-            "is_start": bool(message.text and message.text.startswith("/start")),
-            "has_contact": message.contact is not None
-        }
-    })
-    # endregion
-    
     try:
         print("[tg_start] db_lookup start")
         # Проверяем, есть ли пользователь в базе
@@ -58,17 +21,6 @@ async def cmd_start(message: types.Message):
         logger.info(f"User {tg_id} found in DB: {len(user_res.data) > 0}")
         print(f"[tg_start] db_lookup done found={bool(user_res.data)}")
 
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H4",
-            "location": "bot/handlers/start.py:cmd_start.db_lookup",
-            "message": "db user lookup",
-            "data": {
-                "found_user": bool(user_res.data)
-            }
-        })
-        # endregion
-        
         if not user_res.data:
             # Если нет - просим телефон
             text = (
@@ -85,16 +37,6 @@ async def cmd_start(message: types.Message):
             )
             print("[tg_start] registration prompt sent")
 
-            # region agent log
-            _debug_log({
-                "hypothesisId": "H5",
-                "location": "bot/handlers/start.py:cmd_start.reply_new",
-                "message": "sent registration prompt",
-                "data": {
-                    "branch": "new"
-                }
-            })
-            # endregion
         else:
             # Если есть - показываем главное меню
             user = user_res.data[0]
@@ -114,28 +56,8 @@ async def cmd_start(message: types.Message):
             )
             print("[tg_start] main menu sent")
 
-            # region agent log
-            _debug_log({
-                "hypothesisId": "H5",
-                "location": "bot/handlers/start.py:cmd_start.reply_existing",
-                "message": "sent main menu",
-                "data": {
-                    "branch": "existing"
-                }
-            })
-            # endregion
     except Exception as e:
         print(f"[tg_start] error type={type(e).__name__}")
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H4",
-            "location": "bot/handlers/start.py:cmd_start.error",
-            "message": "start handler error",
-            "data": {
-                "error_type": type(e).__name__
-            }
-        })
-        # endregion
         logger.error("Start handler failed: %s", e, exc_info=True)
         logger.error(f"Error in cmd_start: {e}", exc_info=True)
         await message.answer("❌ Произошла ошибка. Попробуйте еще раз.")

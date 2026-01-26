@@ -11,39 +11,10 @@ from aiogram import Bot
 import logging
 import json
 import re
-import time
-import os
 from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-
-def _get_debug_paths() -> list[str]:
-    if os.name == "nt":
-        return [r"d:\vladexecute\proj\CVETI\.cursor\debug.log"]
-    return ["/tmp/debug.log", "/app/.cursor/debug.log", "/app/debug.log"]
-
-DEBUG_LOG_PATHS = _get_debug_paths()
-
-def _debug_log(payload: dict):
-    try:
-        payload.setdefault("sessionId", "debug-session")
-        payload.setdefault("runId", "run1")
-        payload["timestamp"] = int(time.time() * 1000)
-        line = json.dumps(payload, ensure_ascii=False)
-        wrote = False
-        for log_path in DEBUG_LOG_PATHS:
-            try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-                wrote = True
-                break
-            except Exception:
-                continue
-        if not wrote:
-            print(f"[debug_log] {line}")
-    except Exception:
-        pass
 def _coerce_order(value):
     try:
         return int(value)
@@ -136,18 +107,6 @@ async def upload_file(
 ):
     """Загружает файл в Supabase Storage"""
     try:
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H10",
-            "location": "api/routes/admin.py:upload_file.entry",
-            "message": "upload entry",
-            "data": {
-                "filename": file.filename,
-                "content_type": file.content_type,
-                "folder": folder
-            }
-        })
-        # endregion
         # Читаем содержимое файла
         file_content = await file.read()
 
@@ -179,37 +138,10 @@ async def upload_file(
         is_image_type = bool(file.content_type and file.content_type.startswith("image/"))
         is_allowed_ext = ext in allowed_exts
         is_allowed_detected = detected_ext in allowed_exts if detected_ext else False
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H10",
-            "location": "api/routes/admin.py:upload_file.validation",
-            "message": "upload validation",
-            "data": {
-                "ext": ext,
-                "detected_ext": detected_ext,
-                "is_image_type": is_image_type,
-                "is_allowed_ext": is_allowed_ext,
-                "is_allowed_detected": is_allowed_detected,
-                "size": len(file_content)
-            }
-        })
-        # endregion
-
         if not is_image_type and not is_allowed_ext and not is_allowed_detected:
             detail = "Only image files are allowed"
             if file.content_type:
                 detail = f"Only image files are allowed (content_type: {file.content_type}, ext: {ext or 'none'})"
-            # region agent log
-            _debug_log({
-                "hypothesisId": "H10",
-                "location": "api/routes/admin.py:upload_file.reject",
-                "message": "upload rejected",
-                "data": {
-                    "reason": "type",
-                    "detail": detail
-                }
-            })
-            # endregion
             raise HTTPException(status_code=400, detail=detail)
 
         # Если расширение отсутствует/неподходящее, пытаемся подставить по сигнатуре
@@ -221,18 +153,6 @@ async def upload_file(
         max_size_mb = 50
         max_size = max_size_mb * 1024 * 1024
         if len(file_content) > max_size:
-            # region agent log
-            _debug_log({
-                "hypothesisId": "H10",
-                "location": "api/routes/admin.py:upload_file.reject",
-                "message": "upload rejected",
-                "data": {
-                    "reason": "size",
-                    "size": len(file_content),
-                    "max_size": max_size
-                }
-            })
-            # endregion
             raise HTTPException(status_code=400, detail=f"File size exceeds {max_size_mb}MB limit")
         
         # Загружаем в Supabase Storage
@@ -246,20 +166,6 @@ async def upload_file(
         if not public_url:
             raise HTTPException(status_code=500, detail="Failed to upload file")
 
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H8",
-            "location": "api/routes/admin.py:upload_file.response",
-            "message": "upload response url",
-            "data": {
-                "folder": folder,
-                "filename": filename,
-                "returned_url": public_url,
-                "size": len(file_content)
-            }
-        })
-        # endregion
-        
         return {
             "url": public_url,
             "filename": file.filename,
@@ -270,20 +176,6 @@ async def upload_file(
     except Exception as e:
         logger.error(f"Error in upload_file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
-
-@router.post("/client-log")
-async def client_log(data: Dict[str, Any], _: int = Depends(get_current_admin)):
-    try:
-        _debug_log({
-            "hypothesisId": "H11",
-            "location": "api/routes/admin.py:client_log",
-            "message": "admin client log",
-            "data": data
-        })
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Error in client_log: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Client log error")
 
 # --- Masters ---
 
@@ -333,17 +225,6 @@ async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_curr
             data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
         if "image_url" in data:
             data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H8",
-            "location": "api/routes/admin.py:update_master",
-            "message": "update master image urls",
-            "data": {
-                "photo_url": data.get("photo_url"),
-                "image_url": data.get("image_url")
-            }
-        })
-        # endregion
         res = await supabase.table("masters").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -491,17 +372,6 @@ async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_cur
             data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
         if "photo_url" in data:
             data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H8",
-            "location": "api/routes/admin.py:update_service",
-            "message": "update service image urls",
-            "data": {
-                "image_url": data.get("image_url"),
-                "photo_url": data.get("photo_url")
-            }
-        })
-        # endregion
         res = await supabase.table("services").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -644,17 +514,6 @@ async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_c
             data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
         if "photo_url" in data:
             data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H8",
-            "location": "api/routes/admin.py:update_promotion",
-            "message": "update promotion image urls",
-            "data": {
-                "image_url": data.get("image_url"),
-                "photo_url": data.get("photo_url")
-            }
-        })
-        # endregion
         res = await supabase.table("promotions").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -759,17 +618,6 @@ async def get_user(id: str, _: int = Depends(get_current_admin)):
 @router.put("/users/{id}")
 async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H1",
-            "location": "api/routes/admin.py:update_user",
-            "message": "admin update user",
-            "data": {
-                "keys": list(data.keys()),
-                "has_balance": "balance" in data
-            }
-        })
-        # endregion
         if "balance" in data:
             print(f"[admin_update_user] balance_change_blocked value={data.get('balance')}")
             raise HTTPException(
@@ -805,19 +653,6 @@ async def get_user_transactions(user_id: str, _: int = Depends(get_current_admin
 async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     """Создает транзакцию и обновляет баланс пользователя"""
     try:
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H1",
-            "location": "api/routes/admin.py:create_transaction.entry",
-            "message": "admin create transaction entry",
-            "data": {
-                "user_id": user_id,
-                "amount": data.get("amount"),
-                "has_description": bool(data.get("description")),
-                "code_marker": "admin_tx_no_fallback_v2"
-            }
-        })
-        # endregion
         print(f"[admin_tx] raw_amount={data.get('amount')} user_id={user_id}")
         # Проверяем пользователя
         user_res = await supabase.table("users").select("id").eq("id", user_id).single().execute()
@@ -854,23 +689,6 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             description=description
         )
         print(f"[admin_tx] yclients_result success={success} message={message}")
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H1",
-            "location": "api/routes/admin.py:create_transaction.yclients_result",
-            "message": "yclients manual transaction result",
-            "data": {
-                "success": success,
-                "message": message,
-                "new_balance": new_balance,
-                "no_card_branch": (not success and message in {
-                    "Не найден клиент в YClients",
-                    "Карта лояльности не найдена",
-                    "Не удалось определить ID карты лояльности"
-                })
-            }
-        })
-        # endregion
         if not success:
             if message in {"Не найден клиент в YClients", "Карта лояльности не найдена", "Не удалось определить ID карты лояльности"}:
                 raise HTTPException(

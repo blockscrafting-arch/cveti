@@ -2,9 +2,6 @@
 Сервис для работы с Supabase Storage через нативный клиент Supabase (вместо S3)
 """
 import logging
-import json
-import time
-import os
 import re
 import hashlib
 from datetime import datetime
@@ -22,32 +19,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-def _get_debug_paths() -> list[str]:
-    if os.name == "nt":
-        return [r"d:\vladexecute\proj\CVETI\.cursor\debug.log"]
-    return ["/tmp/debug.log", "/app/.cursor/debug.log", "/app/debug.log"]
-
-DEBUG_LOG_PATHS = _get_debug_paths()
-
 def _debug_log(payload: dict):
-    try:
-        payload.setdefault("sessionId", "debug-session")
-        payload.setdefault("runId", "run1")
-        payload["timestamp"] = int(time.time() * 1000)
-        line = json.dumps(payload, ensure_ascii=False)
-        wrote = False
-        for log_path in DEBUG_LOG_PATHS:
-            try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-                wrote = True
-                break
-            except Exception:
-                continue
-        if not wrote:
-            print(f"[debug_log] {line}")
-    except Exception:
-        pass
+    return
 
 def rewrite_storage_public_url(url: Optional[str]) -> Optional[str]:
     if not url:
