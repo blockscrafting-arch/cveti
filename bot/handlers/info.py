@@ -184,6 +184,8 @@ def _format_percent(value: float) -> int:
 async def show_custom_button_response(message: types.Message):
     """Fallback для пользовательских кнопок из БД."""
     button_text = message.text or ""
+    if button_text.startswith("/"):
+        return
     if not button_text:
         return
     tg_id = message.from_user.id
