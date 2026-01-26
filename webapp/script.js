@@ -2263,6 +2263,21 @@ async function handleImageUpload(file, prefix) {
     const statusEl = document.getElementById(`${prefix}-upload-status`);
     const urlInput = document.getElementById(`${prefix}-url`);
     const previewEl = document.getElementById(`${prefix}-preview`);
+
+    const logClientUpload = async (event, payload = {}) => {
+        try {
+            await fetch(`${window.location.origin}/api/admin/client-log`, {
+                method: 'POST',
+                headers: {
+                    'X-Tg-Init-Data': tg.initData || '',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ event, prefix, ...payload })
+            });
+        } catch (err) {
+            // ignore client log errors
+        }
+    };
     
     // Показываем статус загрузки
     if (statusEl) {
@@ -2273,6 +2288,11 @@ async function handleImageUpload(file, prefix) {
     
     try {
         const maxSizeMb = 50;
+        await logClientUpload('start', {
+            name: file?.name || '',
+            type: file?.type || '',
+            size: file?.size || 0
+        });
         if (statusEl) {
             statusEl.textContent = 'Подготовка изображения...';
             statusEl.className = 'mt-2 text-xs text-stone-500';
@@ -2280,6 +2300,12 @@ async function handleImageUpload(file, prefix) {
 
         const { file: preparedFile, compressed } = await compressImageFile(file);
         const uploadFile = preparedFile || file;
+        await logClientUpload('prepared', {
+            compressed: !!compressed,
+            name: uploadFile?.name || '',
+            type: uploadFile?.type || '',
+            size: uploadFile?.size || 0
+        });
         if (compressed && statusEl) {
             statusEl.textContent = 'Сжатие завершено, загружаю...';
         }
@@ -2299,6 +2325,7 @@ async function handleImageUpload(file, prefix) {
         else if (prefix === 'broadcast-image') folder = 'broadcasts';
         
         formData.append('folder', folder);
+        await logClientUpload('upload_request', { folder });
         
         // Отправляем файл на сервер
         const response = await fetch(`${window.location.origin}/api/admin/upload`, {
@@ -2309,20 +2336,31 @@ async function handleImageUpload(file, prefix) {
             body: formData
         });
         
+        await logClientUpload('upload_response', { status: response.status });
+        
         if (!response.ok) {
-            let errorDetail = 'Ошибка загрузки';
+            let errorDetail = `Ошибка загрузки (${response.status})`;
             try {
-                const payload = await response.json();
-                if (payload?.detail) {
-                    errorDetail = payload.detail;
+                const rawText = await response.text();
+                if (rawText) {
+                    try {
+                        const payload = JSON.parse(rawText);
+                        if (payload?.detail) {
+                            errorDetail = payload.detail;
+                        }
+                    } catch (err) {
+                        errorDetail = `${errorDetail}: ${rawText.slice(0, 160)}`;
+                    }
                 }
             } catch (err) {
                 // ignore json parse errors
             }
+            await logClientUpload('upload_error_response', { status: response.status, detail: errorDetail });
             throw new Error(errorDetail);
         }
         
         const result = await response.json();
+        await logClientUpload('upload_success', { url: result?.url || '' });
         
         // Сохраняем URL в скрытом поле
         if (urlInput) {
@@ -2357,6 +2395,7 @@ async function handleImageUpload(file, prefix) {
         
     } catch (error) {
         console.error('Image upload error:', error);
+        await logClientUpload('upload_exception', { message: error?.message || '', name: error?.name || '' });
         if (statusEl) {
             const message = error?.message && error.message !== 'Upload failed'
                 ? error.message

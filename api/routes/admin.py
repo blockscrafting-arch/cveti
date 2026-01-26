@@ -271,6 +271,20 @@ async def upload_file(
         logger.error(f"Error in upload_file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
 
+@router.post("/client-log")
+async def client_log(data: Dict[str, Any], _: int = Depends(get_current_admin)):
+    try:
+        _debug_log({
+            "hypothesisId": "H11",
+            "location": "api/routes/admin.py:client_log",
+            "message": "admin client log",
+            "data": data
+        })
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error in client_log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Client log error")
+
 # --- Masters ---
 
 @router.get("/masters")
