@@ -95,6 +95,15 @@ class StorageService:
             public_url = self._get_public_url(file_path)
             content_type = self._get_content_type(filename)
             # Предпочитаем S3 API (aioboto3), если настроены креды
+            def _upload_via_supabase() -> None:
+                res = supabase.storage.from_(self.bucket).upload(
+                    path=file_path,
+                    file=file_content,
+                    file_options={"content-type": content_type, "upsert": "true"}
+                )
+                if hasattr(res, 'error') and res.error:
+                    raise Exception(str(res.error))
+
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
                 session = aioboto3.Session()
                 attempts = [
@@ -117,6 +126,7 @@ class StorageService:
                 ]
                 uploaded = False
                 last_error = None
+                last_error_code = None
                 for attempt in attempts:
                     # region agent log
                     _debug_log({
@@ -179,6 +189,7 @@ class StorageService:
                         error_code = None
                         if err.response:
                             error_code = err.response.get("Error", {}).get("Code")
+                        last_error_code = error_code
                         # region agent log
                         _debug_log({
                             "hypothesisId": "H3",
@@ -201,17 +212,51 @@ class StorageService:
                         if error_code != "XAmzContentSHA256Mismatch":
                             raise
                 if not uploaded and last_error:
+                    if last_error_code == "XAmzContentSHA256Mismatch":
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H3",
+                            "location": "bot/services/storage.py:upload_file.supabase_fallback",
+                            "message": "s3 checksum mismatch, fallback to supabase",
+                            "data": {
+                                "bucket": self.bucket,
+                                "key": file_path
+                            }
+                        })
+                        # endregion
+                        try:
+                            _upload_via_supabase()
+                            # region agent log
+                            _debug_log({
+                                "hypothesisId": "H3",
+                                "location": "bot/services/storage.py:upload_file.supabase_fallback_ok",
+                                "message": "supabase fallback ok",
+                                "data": {
+                                    "bucket": self.bucket,
+                                    "key": file_path,
+                                    "public_url": public_url
+                                }
+                            })
+                            # endregion
+                            uploaded = True
+                        except Exception as upload_error:
+                            # region agent log
+                            _debug_log({
+                                "hypothesisId": "H3",
+                                "location": "bot/services/storage.py:upload_file.supabase_fallback_error",
+                                "message": "supabase fallback error",
+                                "data": {
+                                    "error_type": type(upload_error).__name__
+                                }
+                            })
+                            # endregion
+                            raise last_error
+                if not uploaded and last_error:
                     raise last_error
             else:
                 # Фоллбек на нативный клиент Supabase (если есть storage)
                 try:
-                    res = supabase.storage.from_(self.bucket).upload(
-                        path=file_path,
-                        file=file_content,
-                        file_options={"content-type": content_type, "upsert": "true"}
-                    )
-                    if hasattr(res, 'error') and res.error:
-                        raise Exception(str(res.error))
+                    _upload_via_supabase()
                 except Exception as upload_error:
                     # region agent log
                     _debug_log({
