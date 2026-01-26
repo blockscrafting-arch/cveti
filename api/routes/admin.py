@@ -3,7 +3,7 @@ from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.notifications import send_broadcast_message
 from bot.services.storage import get_storage_service
-from bot.services.settings import get_setting
+from bot.services.loyalty import apply_yclients_manual_transaction, get_user_available_balance, sync_user_with_yclients
 from bot.config import settings
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
@@ -14,7 +14,6 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
 def _coerce_order(value):
     try:
         return int(value)
@@ -108,8 +107,15 @@ async def upload_file(
     """Загружает файл в Supabase Storage"""
     try:
         # Проверяем тип файла
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="Only image files are allowed")
+        allowed_exts = {"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"}
+        filename = file.filename or "image.jpg"
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        is_image_type = bool(file.content_type and file.content_type.startswith("image/"))
+        if not is_image_type and ext not in allowed_exts:
+            detail = "Only image files are allowed"
+            if file.content_type:
+                detail = f"Only image files are allowed (content_type: {file.content_type})"
+            raise HTTPException(status_code=400, detail=detail)
         
         # Читаем содержимое файла
         file_content = await file.read()
@@ -123,7 +129,7 @@ async def upload_file(
         storage_service = get_storage_service()
         public_url = await storage_service.upload_file(
             file_content=file_content,
-            filename=file.filename or "image.jpg",
+            filename=filename,
             folder=folder
         )
         
@@ -591,29 +597,22 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
         
         # Для списаний проверяем доступный баланс
         if amount < 0:
-            available_res = await supabase.rpc("get_user_available_balance", {
-                "p_user_id": int(user_id)
-            }).execute()
-            available_balance = int(available_res.data or 0)
+            await sync_user_with_yclients(int(user_id))
+            available_balance = await get_user_available_balance(int(user_id))
             if abs(amount) > available_balance:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Недостаточно баллов. Доступно: {available_balance}"
                 )
-        
-        expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
-        
-        result = await supabase.rpc("adjust_loyalty_balance", {
-            "p_user_id": int(user_id),
-            "p_amount": amount,
-            "p_description": description,
-            "p_expiration_days": expiration_days
-        }).execute()
-        
-        new_balance = None
-        if result and isinstance(result.data, dict):
-            new_balance = result.data.get("new_balance")
-        
+
+        success, message, new_balance = await apply_yclients_manual_transaction(
+            user_id=int(user_id),
+            amount=amount,
+            description=description
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail=message)
+
         return {"success": True, "new_balance": new_balance}
     except HTTPException:
         raise

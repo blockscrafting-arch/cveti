@@ -2,6 +2,7 @@ from fastapi import APIRouter, Header, HTTPException
 from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import get_user_available_balance, sync_user_with_yclients
+from bot.services.settings import get_setting
 from bot.services.yclients_api import yclients
 from bot.config import settings
 from typing import Optional
@@ -109,12 +110,17 @@ async def get_app_content():
         services_res = await supabase.table("services").select("*").eq("is_active", True).order("order").order("id").execute()
         masters_res = await supabase.table("masters").select("*").order("order").order("id").execute()
         promotions_res = await supabase.table("promotions").select("*").eq("is_active", True).order("order").order("id").execute()
+        loyalty_max_spend_percentage = await get_setting('loyalty_max_spend_percentage', settings.LOYALTY_MAX_SPEND_PERCENTAGE)
+        loyalty_expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
         
         return {
             "services": services_res.data if services_res.data else [],
             "masters": masters_res.data if masters_res.data else [],
             "promotions": promotions_res.data if promotions_res.data else [],
-            "booking_url": settings.YCLIENTS_BOOKING_URL
+            "booking_url": settings.YCLIENTS_BOOKING_URL,
+            "storage_public_url_base": settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL,
+            "loyalty_max_spend_percentage": loyalty_max_spend_percentage,
+            "loyalty_expiration_days": loyalty_expiration_days
         }
     except Exception as e:
         logger.error(f"Database error in get_app_content: {e}", exc_info=True)
@@ -123,5 +129,8 @@ async def get_app_content():
             "services": [],
             "masters": [],
             "promotions": [],
-            "booking_url": settings.YCLIENTS_BOOKING_URL
+            "booking_url": settings.YCLIENTS_BOOKING_URL,
+            "storage_public_url_base": settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL,
+            "loyalty_max_spend_percentage": settings.LOYALTY_MAX_SPEND_PERCENTAGE,
+            "loyalty_expiration_days": settings.LOYALTY_EXPIRATION_DAYS
         }

@@ -2,11 +2,11 @@ from aiogram import Router, types, F
 from bot.services.supabase_client import supabase
 from bot.services.phone_normalize import normalize_phone
 from bot.services.settings import get_setting
-from bot.services.loyalty import sync_user_with_yclients
+from bot.services.loyalty import sync_user_with_yclients, apply_yclients_manual_transaction
 from bot.keyboards import get_main_menu, get_profile_inline_keyboard
 from bot.config import settings
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ async def handle_contact(message: types.Message):
                 "tg_id": tg_id,
                 "phone": phone,
                 "name": name,
-                "balance": welcome_bonus,
+                "balance": 0,
                 "level": "new"
             }).execute()
             
@@ -64,29 +64,30 @@ async def handle_contact(message: types.Message):
                 
             user_id = user_res.data[0]["id"]
             
-            # Начисляем приветственные баллы если они есть
+            # Начисляем приветственные баллы через YClients, если они есть
+            bonus_applied = True
             if welcome_bonus > 0:
-                expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
-                expires_at = datetime.utcnow() + timedelta(days=expiration_days)
-                
-                await supabase.table("loyalty_transactions").insert({
-                    "user_id": user_id,
-                    "amount": welcome_bonus,
-                    "transaction_type": "earn",
-                    "description": "Приветственный бонус",
-                    "expires_at": expires_at.isoformat(),
-                    "remaining_amount": welcome_bonus
-                }).execute()
+                success, message, _ = await apply_yclients_manual_transaction(
+                    user_id=user_id,
+                    amount=welcome_bonus,
+                    description="Приветственный бонус"
+                )
+                if not success:
+                    bonus_applied = False
+                    logger.warning(f"Welcome bonus failed for user {user_id}: {message}")
             
             # Пытаемся синхронизировать с YClients (возможно клиент уже там есть)
             sync_result = await sync_user_with_yclients(user_id)
-            final_balance = sync_result.get("balance") if sync_result else welcome_bonus
+            final_balance = sync_result.get("balance") if sync_result else 0
             
             if welcome_bonus > 0:
+                bonus_line = f"🎁 Вам начислено **{welcome_bonus} приветственных баллов**!\n\n"
+                if not bonus_applied:
+                    bonus_line = "⚠️ Не удалось начислить приветственный бонус в YClients.\n\n"
                 text = (
                     "🎉 **Вы успешно зарегистрированы!**\n\n"
                     "Добро пожаловать в программу лояльности студии красоты ЦВЕТИ!\n\n"
-                    f"🎁 Вам начислено **{welcome_bonus} приветственных баллов**!\n\n"
+                    f"{bonus_line}"
                     f"💰 **Ваш баланс:** {final_balance} баллов\n\n"
                     "Баллы начисляются автоматически после каждого визита.\n"
                     "Выберите действие из меню:"

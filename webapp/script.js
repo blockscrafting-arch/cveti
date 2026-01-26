@@ -21,6 +21,7 @@ if (!window.Telegram?.WebApp) {
 
 // Объявляем tg один раз после проверки/создания
 const tg = window.Telegram?.WebApp || {};
+let storagePublicUrlBase = '';
 
 
 const HTML_ESCAPE_MAP = {
@@ -45,11 +46,19 @@ function safeUrl(value, allowRelative = true) {
     try {
         const parsed = new URL(raw, window.location.origin);
         const protocol = parsed.protocol.toLowerCase();
+        if (storagePublicUrlBase && parsed.pathname.startsWith('/storage/v1/object/public/')) {
+            const base = storagePublicUrlBase.replace(/\/$/, '');
+            return `${base}${parsed.pathname}`;
+        }
         if (protocol === 'http:' || protocol === 'https:') {
             return parsed.href;
         }
     } catch (error) {
         // ignore invalid URL
+    }
+    if (storagePublicUrlBase && raw.startsWith('/storage/v1/object/public/')) {
+        const base = storagePublicUrlBase.replace(/\/$/, '');
+        return `${base}${raw}`;
     }
     if (allowRelative && (raw.startsWith('/') || raw.startsWith('./') || raw.startsWith('../'))) {
         return raw;
@@ -345,6 +354,20 @@ async function loadContent() {
     if (data.booking_url) {
         const safeBookingUrl = safeUrl(data.booking_url);
         if (safeBookingUrl) bookingUrl = safeBookingUrl;
+    }
+    if (data.storage_public_url_base) {
+        storagePublicUrlBase = String(data.storage_public_url_base || '');
+    }
+
+    const maxSpendEl = document.getElementById('loyalty-max-spend');
+    const expirationEl = document.getElementById('loyalty-expiration-days');
+    if (maxSpendEl) {
+        const value = Number(data.loyalty_max_spend_percentage ?? 0.3);
+        maxSpendEl.textContent = String(Math.round(value * 100));
+    }
+    if (expirationEl) {
+        const value = Number(data.loyalty_expiration_days ?? 90);
+        expirationEl.textContent = String(Math.max(0, Math.round(value)));
     }
     
     renderPromotions(data.promotions || []);
@@ -1047,7 +1070,7 @@ function renderBotButtonsEditor() {
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст ответа</label>
             <textarea name="response_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-28" required>${safeResponseText}</textarea>
-            <p class="text-xs text-stone-400 mt-1 px-1">Markdown + {YCLIENTS_BOOKING_URL} и {LOYALTY_PERCENTAGE}</p>
+            <p class="text-xs text-stone-400 mt-1 px-1">Markdown + {YCLIENTS_BOOKING_URL}, {LOYALTY_PERCENTAGE}, {LOYALTY_MAX_SPEND_PERCENTAGE}, {LOYALTY_EXPIRATION_DAYS}</p>
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Тип обработчика</label>
@@ -1974,7 +1997,7 @@ function renderFormFields(item = {}) {
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Текст ответа</label>
                 <textarea name="response_text" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm h-32" required>${safe.responseText}</textarea>
-                <p class="text-xs text-stone-400 mt-1 px-1">Поддерживается Markdown. Можно использовать {YCLIENTS_BOOKING_URL} и {LOYALTY_PERCENTAGE}</p>
+                <p class="text-xs text-stone-400 mt-1 px-1">Поддерживается Markdown. Можно использовать {YCLIENTS_BOOKING_URL}, {LOYALTY_PERCENTAGE}, {LOYALTY_MAX_SPEND_PERCENTAGE}, {LOYALTY_EXPIRATION_DAYS}</p>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Тип обработчика</label>
@@ -2162,7 +2185,16 @@ async function handleImageUpload(file, prefix) {
         });
         
         if (!response.ok) {
-            throw new Error('Upload failed');
+            let errorDetail = 'Ошибка загрузки';
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    errorDetail = payload.detail;
+                }
+            } catch (err) {
+                // ignore json parse errors
+            }
+            throw new Error(errorDetail);
         }
         
         const result = await response.json();
@@ -2201,7 +2233,10 @@ async function handleImageUpload(file, prefix) {
     } catch (error) {
         console.error('Image upload error:', error);
         if (statusEl) {
-            statusEl.textContent = '✗ Ошибка загрузки';
+            const message = error?.message && error.message !== 'Upload failed'
+                ? error.message
+                : 'Ошибка загрузки';
+            statusEl.textContent = `✗ ${message}`;
             statusEl.className = 'mt-2 text-xs text-red-600';
         }
         if (tg.HapticFeedback) {

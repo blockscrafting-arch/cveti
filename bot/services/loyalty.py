@@ -178,6 +178,64 @@ async def process_loyalty_payment(phone: str, amount: float, visit_id: int):
         return None, f"Ошибка обработки платежа: {str(e)}"
 
 
+async def apply_yclients_manual_transaction(
+    user_id: int,
+    amount: int,
+    description: str
+) -> Tuple[bool, str, Optional[int]]:
+    """
+    Ручная операция с баллами через YClients (источник истины).
+
+    Returns:
+        (success, message, new_balance)
+    """
+    try:
+        user_res = await supabase.table("users").select("*").eq("id", user_id).execute()
+        if not user_res.data:
+            return False, "Пользователь не найден", None
+        user = user_res.data[0]
+        phone = user.get("phone")
+        yclients_id = user.get("yclients_id")
+
+        if not yclients_id and phone:
+            client = await yclients.get_client_by_phone(phone)
+            if client and client.get("id"):
+                yclients_id = client["id"]
+                await supabase.table("users").update({"yclients_id": yclients_id}).eq("id", user_id).execute()
+
+        if not yclients_id:
+            return False, "Не найден клиент в YClients", None
+
+        loyalty_card = await yclients.get_client_loyalty_card(yclients_id)
+        if not loyalty_card:
+            return False, "Карта лояльности не найдена", None
+
+        card_id = loyalty_card.get("id") or loyalty_card.get("card_id")
+        if not card_id:
+            return False, "Не удалось определить ID карты лояльности", None
+
+        if amount == 0:
+            return False, "Сумма операции не может быть 0", None
+
+        operation_type = "credit" if amount > 0 else "debit"
+        result = await yclients.manual_loyalty_transaction(
+            card_id=int(card_id),
+            amount=abs(amount),
+            operation_type=operation_type,
+            comment=description
+        )
+        if not result:
+            return False, "Не удалось выполнить операцию в YClients", None
+
+        sync_result = await sync_user_with_yclients(user_id)
+        if sync_result:
+            return True, "Операция выполнена", int(sync_result.get("balance") or 0)
+
+        return True, "Операция выполнена, но синхронизация не удалась", None
+    except Exception as e:
+        logger.error(f"Error in apply_yclients_manual_transaction: {e}", exc_info=True)
+        return False, f"Ошибка операции: {str(e)}", None
+
 async def get_user_available_balance(user_id: int) -> int:
     """
     Получает актуальный баланс пользователя (только не истекшие баллы)

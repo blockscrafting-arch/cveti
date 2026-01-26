@@ -156,6 +156,57 @@ class YClientsAPI:
         logger.debug(f"No loyalty info found for client_id={client_id} in company_id={self.company_id}")
         return None
 
+    async def get_client_loyalty_card(self, client_id: int) -> Optional[Dict[str, Any]]:
+        """Возвращает первую карту лояльности клиента (если есть)."""
+        if not client_id:
+            return None
+
+        endpoints_to_try = [
+            f"loyalty/client_cards/{client_id}",
+            f"loyalty/client/{self.company_id}/{client_id}",
+            f"loyalty/cards/{self.company_id}/{client_id}",
+            f"clients/{self.company_id}/{client_id}/loyalty",
+        ]
+        for path in endpoints_to_try:
+            try:
+                result = await self._request("GET", path, use_user_token=True)
+                if not result:
+                    continue
+                if isinstance(result, list) and result:
+                    return result[0]
+                if isinstance(result, dict):
+                    data = result.get("data")
+                    if isinstance(data, list) and data:
+                        return data[0]
+                    if isinstance(data, dict):
+                        return data
+                    if "card" in result and isinstance(result["card"], dict):
+                        return result["card"]
+                    if "id" in result:
+                        return result
+            except Exception as e:
+                logger.debug(f"Failed to get loyalty cards from {path}: {e}")
+        return None
+
+    async def manual_loyalty_transaction(
+        self,
+        card_id: int,
+        amount: float,
+        operation_type: str,
+        comment: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Ручная операция по карте лояльности (credit/debit/correction/refund)."""
+        if not card_id:
+            return None
+        payload: Dict[str, Any] = {
+            "amount": amount,
+            "operation_type": operation_type,
+        }
+        if comment:
+            payload["comment"] = comment
+        path = f"company/{self.company_id}/loyalty/cards/{card_id}/manual_transaction"
+        return await self._request("POST", path, json=payload, use_user_token=True)
+
     def _format_visit_status(self, raw: Dict[str, Any]) -> str:
         if raw.get("deleted") or raw.get("canceled"):
             return "Отменено"

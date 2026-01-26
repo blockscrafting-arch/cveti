@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_ACCESS_KEY: str = os.getenv("SUPABASE_STORAGE_ACCESS_KEY", "")
     SUPABASE_STORAGE_SECRET_KEY: str = os.getenv("SUPABASE_STORAGE_SECRET_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "CVETi")
+    SUPABASE_STORAGE_PUBLIC_URL_BASE: str = os.getenv("SUPABASE_STORAGE_PUBLIC_URL_BASE", "")
     
     # YClients
     YCLIENTS_PARTNER_TOKEN: str = os.getenv("YCLIENTS_PARTNER_TOKEN", "")  # Токен партнера (разработчика)
