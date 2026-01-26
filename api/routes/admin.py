@@ -149,10 +149,11 @@ async def upload_file(
             base_name = filename.rsplit(".", 1)[0] if "." in filename else (filename or "image")
             filename = f"{base_name}.{detected_ext}"
         
-        # Проверяем размер файла (максимум 10MB)
-        max_size = 10 * 1024 * 1024  # 10MB
+        # Проверяем размер файла (максимум 50MB)
+        max_size_mb = 50
+        max_size = max_size_mb * 1024 * 1024
         if len(file_content) > max_size:
-            raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
+            raise HTTPException(status_code=400, detail=f"File size exceeds {max_size_mb}MB limit")
         
         # Загружаем в Supabase Storage
         storage_service = get_storage_service()

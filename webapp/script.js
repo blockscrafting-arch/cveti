@@ -2162,6 +2162,11 @@ async function handleImageUpload(file, prefix) {
     }
     
     try {
+        const maxSizeMb = 50;
+        if (file.size > maxSizeMb * 1024 * 1024) {
+            throw new Error(`Файл больше ${maxSizeMb} МБ`);
+        }
+
         // Создаем FormData для отправки файла
         const formData = new FormData();
         formData.append('file', file);
