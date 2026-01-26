@@ -615,8 +615,11 @@ async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_curren
             }
         })
         # endregion
+        if "balance" in data:
+            print("[admin_update_user] balance_change_blocked")
         # Удаляем updated_at из данных, если он там есть - БД обновит автоматически через триггер или DEFAULT
         data.pop("updated_at", None)
+        data.pop("balance", None)
         res = await supabase.table("users").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:

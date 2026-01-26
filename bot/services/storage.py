@@ -107,6 +107,7 @@ class StorageService:
                     }
                 })
                 # endregion
+                print(f"[s3_upload] endpoint={self.s3_endpoint} region={self.s3_region} bucket={self.bucket} bytes={len(file_content) if file_content else 0} type={content_type}")
                 session = aioboto3.Session()
                 async with session.client(
                     "s3",
@@ -132,6 +133,7 @@ class StorageService:
                     }
                 })
                 # endregion
+                print(f"[s3_upload] ok bucket={self.bucket} key={file_path}")
             else:
                 # Фоллбек на нативный клиент Supabase (если есть storage)
                 try:
@@ -173,6 +175,7 @@ class StorageService:
                 }
             })
             # endregion
+            print(f"[s3_upload] error type={type(e).__name__}")
             logger.error(f"Error uploading file to Supabase Storage: {e}", exc_info=True)
             return None
     
