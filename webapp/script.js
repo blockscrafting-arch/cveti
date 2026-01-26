@@ -2175,7 +2175,7 @@ function updateBroadcastRecipients() {
 const IMAGE_MAX_DIMENSION = 2560;
 const IMAGE_COMPRESS_THRESHOLD_MB = 3;
 const IMAGE_COMPRESS_QUALITY = 0.86;
-const IMAGE_UPLOAD_TARGET_BYTES = 900 * 1024;
+const IMAGE_UPLOAD_TARGET_BYTES = 5 * 1024 * 1024;
 
 async function _loadImageFromFile(file) {
     return new Promise((resolve, reject) => {
@@ -2384,6 +2384,9 @@ async function handleImageUpload(file, prefix) {
         
         if (!response.ok) {
             let errorDetail = `Ошибка загрузки (${response.status})`;
+            if (response.status === 413) {
+                errorDetail = 'Файл слишком большой для сервера. Увеличьте лимит загрузки на сервере (client_max_body_size) или уменьшите изображение.';
+            }
             try {
                 const rawText = await response.text();
                 if (rawText) {
