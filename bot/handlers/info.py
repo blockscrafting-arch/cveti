@@ -180,7 +180,7 @@ def _format_percent(value: float) -> int:
     return int(round(percent))
 
 
-@router.message(F.text)
+@router.message(F.text & ~F.text.startswith("/"))
 async def show_custom_button_response(message: types.Message):
     """Fallback для пользовательских кнопок из БД."""
     button_text = message.text or ""
