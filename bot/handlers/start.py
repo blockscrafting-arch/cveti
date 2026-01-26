@@ -36,8 +36,7 @@ logger = logging.getLogger(__name__)
 async def cmd_start(message: types.Message):
     tg_id = message.from_user.id
     
-    logger.info(f"Command /start from user {tg_id}")
-    logger.info("Start handler received text=%s contact=%s", message.text, bool(message.contact))
+    print(f"[tg_start] entry user={tg_id} text={message.text} contact={bool(message.contact)}")
 
     # region agent log
     _debug_log({

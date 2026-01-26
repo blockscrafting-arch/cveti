@@ -205,13 +205,7 @@ async def telegram_webhook(request: Request):
             update_type = "my_chat_member"
             chat_id = update_data.get("my_chat_member", {}).get("chat", {}).get("id")
 
-        logger.info(
-            "Telegram update received: id=%s type=%s chat_id=%s text=%s",
-            update_id,
-            update_type,
-            chat_id,
-            update_data.get("message", {}).get("text")
-        )
+        print(f"[tg_webhook] entry id={update_id} type={update_type} chat_id={chat_id} text={update_data.get('message', {}).get('text')}")
 
         # region agent log
         _debug_log({
@@ -231,9 +225,9 @@ async def telegram_webhook(request: Request):
         update = Update.model_validate(update_data, context={"bot": _telegram_bot})
         
         # Передаем обновление в Dispatcher для обработки
-        logger.info("Telegram update dispatching: id=%s type=%s", update_id, update_type)
+        print(f"[tg_webhook] dispatching id={update_id} type={update_type}")
         await dp.feed_update(_telegram_bot, update)
-        logger.info("Telegram update dispatched: id=%s type=%s", update_id, update_type)
+        print(f"[tg_webhook] dispatched id={update_id} type={update_type}")
 
         # region agent log
         _debug_log({
