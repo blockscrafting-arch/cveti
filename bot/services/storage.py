@@ -5,10 +5,15 @@ import logging
 import json
 import time
 import os
+import re
 import hashlib
-from urllib.parse import quote
+from datetime import datetime
+from urllib.parse import quote, urlparse
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from botocore.auth import SigV4Auth
+from botocore.credentials import Credentials
+from botocore.awsrequest import AWSRequest
 import httpx
 import aioboto3
 from bot.config import settings
@@ -159,6 +164,71 @@ class StorageService:
                 }
             })
             # endregion
+
+            async def _upload_via_sigv4_http() -> None:
+                if not self.s3_endpoint or not self.s3_access_key or not self.s3_secret_key:
+                    raise Exception("S3 HTTP upload not configured")
+                endpoint = self.s3_endpoint.rstrip("/")
+                key_path = quote(file_path, safe="/")
+                url = f"{endpoint}/{self.bucket}/{key_path}"
+                host = urlparse(endpoint).netloc
+                payload_hash = payload_sha256 or hashlib.sha256(file_content).hexdigest()
+                amz_date = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                headers = {
+                    "Host": host,
+                    "Content-Type": content_type,
+                    "Content-Length": str(len(file_content) if file_content else 0),
+                    "x-amz-content-sha256": payload_hash,
+                    "x-amz-date": amz_date
+                }
+                request = AWSRequest(method="PUT", url=url, data=file_content, headers=headers)
+                SigV4Auth(
+                    Credentials(self.s3_access_key, self.s3_secret_key),
+                    "s3",
+                    self.s3_region
+                ).add_auth(request)
+                signed_headers = dict(request.headers)
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H6",
+                    "location": "bot/services/storage.py:upload_file.sigv4_http_attempt",
+                    "message": "sigv4 http put attempt",
+                    "data": {
+                        "endpoint": endpoint,
+                        "region": self.s3_region,
+                        "bucket": self.bucket,
+                        "key": file_path,
+                        "content_length": len(file_content) if file_content else 0
+                    }
+                })
+                # endregion
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.put(
+                        url,
+                        headers=signed_headers,
+                        content=file_content
+                    )
+                error_code = None
+                if response.text:
+                    match = re.search(r"<Code>([^<]+)</Code>", response.text)
+                    if match:
+                        error_code = match.group(1)
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H6",
+                    "location": "bot/services/storage.py:upload_file.sigv4_http_response",
+                    "message": "sigv4 http response",
+                    "data": {
+                        "status_code": response.status_code,
+                        "error_code": error_code
+                    }
+                })
+                # endregion
+                if response.status_code >= 400:
+                    detail = f"S3 http upload failed: {response.status_code}"
+                    if error_code:
+                        detail = f"{detail} {error_code}"
+                    raise Exception(detail)
 
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
                 session = aioboto3.Session()
@@ -330,6 +400,33 @@ class StorageService:
                         )
                         if error_code != "XAmzContentSHA256Mismatch":
                             raise
+                if not uploaded and last_error and last_error_code == "XAmzContentSHA256Mismatch":
+                    try:
+                        await _upload_via_sigv4_http()
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H6",
+                            "location": "bot/services/storage.py:upload_file.sigv4_http_success",
+                            "message": "sigv4 http upload ok",
+                            "data": {
+                                "bucket": self.bucket,
+                                "key": file_path,
+                                "public_url": public_url
+                            }
+                        })
+                        # endregion
+                        uploaded = True
+                    except Exception as http_error:
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H6",
+                            "location": "bot/services/storage.py:upload_file.sigv4_http_error",
+                            "message": "sigv4 http upload error",
+                            "data": {
+                                "error_type": type(http_error).__name__
+                            }
+                        })
+                        # endregion
                 if not uploaded and last_error:
                     if last_error_code == "XAmzContentSHA256Mismatch" and not settings.S3_SUPABASE_FALLBACK_ENABLED:
                         # region agent log
