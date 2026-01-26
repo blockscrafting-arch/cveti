@@ -87,6 +87,16 @@ function safeNumber(value, fallback = 0) {
     return Number.isFinite(num) ? num : fallback;
 }
 
+const PERCENT_SETTING_KEYS = new Set([
+    'loyalty_percentage',
+    'loyalty_max_spend_percentage'
+]);
+
+function normalizePercentValue(value) {
+    const num = safeNumber(value, 0);
+    return num <= 1 ? num * 100 : num;
+}
+
 // Инициализируем Telegram WebApp
 if (tg && tg.expand) {
     tg.expand();
@@ -362,8 +372,8 @@ async function loadContent() {
     const maxSpendEl = document.getElementById('loyalty-max-spend');
     const expirationEl = document.getElementById('loyalty-expiration-days');
     if (maxSpendEl) {
-        const value = Number(data.loyalty_max_spend_percentage ?? 0.3);
-        maxSpendEl.textContent = String(Math.round(value * 100));
+        const value = normalizePercentValue(data.loyalty_max_spend_percentage ?? 0.3);
+        maxSpendEl.textContent = String(Math.round(value));
     }
     if (expirationEl) {
         const value = Number(data.loyalty_expiration_days ?? 90);
@@ -1495,7 +1505,10 @@ function renderAdminList() {
         listEl.innerHTML = adminItems.map(item => {
             const safeKey = encodeId(item.key);
             const description = escapeHtml(item.description || item.key);
-            const value = escapeHtml(item.value);
+            const displayValue = PERCENT_SETTING_KEYS.has(item.key)
+                ? `${Math.round(normalizePercentValue(item.value))}%`
+                : item.value;
+            const value = escapeHtml(displayValue);
             return `
             <div class="bg-white p-5 rounded-[28px] border border-white/50 shadow-card active:scale-[0.98] transition-transform flex items-center gap-4" onclick="openSettingModal('${safeKey}')">
                 <div class="w-12 h-12 rounded-xl bg-stone-50 flex items-center justify-center text-xl shadow-sm">
@@ -1823,7 +1836,10 @@ function renderFormFields(item = {}) {
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Баланс баллов</label>
-                <input type="number" name="balance" value="${safe.balance}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
+                <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm text-stone-700">
+                    ${safe.balance}
+                </div>
+                <div class="text-[10px] text-stone-400 mt-2 px-1">Баланс изменяется через «Добавить транзакцию»</div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Уровень</label>
@@ -2498,7 +2514,11 @@ async function openSettingModal(key) {
     
     let inputHtml = '';
     if (setting.type === 'number' || setting.type === 'float') {
-        inputHtml = `<input type="number" name="value" value="${escapeAttr(setting.value)}" step="${setting.type === 'float' ? '0.01' : '1'}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
+        const displayValue = PERCENT_SETTING_KEYS.has(setting.key)
+            ? normalizePercentValue(setting.value)
+            : setting.value;
+        const step = PERCENT_SETTING_KEYS.has(setting.key) ? '0.1' : (setting.type === 'float' ? '0.01' : '1');
+        inputHtml = `<input type="number" name="value" value="${escapeAttr(displayValue)}" step="${step}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>`;
     } else if (setting.type === 'boolean') {
         inputHtml = `
             <select name="value" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm">
@@ -2537,6 +2557,11 @@ async function handleSettingSubmit(e, key) {
     if (setting.type === 'number') value = parseInt(value);
     else if (setting.type === 'float') value = parseFloat(value);
     else if (setting.type === 'boolean') value = value === 'true';
+
+    if (PERCENT_SETTING_KEYS.has(key)) {
+        const numeric = safeNumber(value, 0);
+        value = numeric > 1 ? numeric / 100 : numeric;
+    }
     
     try {
         const response = await fetch(`${window.location.origin}/api/settings/${key}`, {

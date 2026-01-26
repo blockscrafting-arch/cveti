@@ -47,15 +47,13 @@ async def get_app_profile(x_tg_init_data: Optional[str] = Header(None)):
                 else:
                     user["balance"] = sync_result.get("balance", user.get("balance", 0))
             else:
-                # Если синхронизация не удалась (например, не нашли в YClients), 
-                # считаем по нашей базе как раньше
-                available_balance = await get_user_available_balance(user["id"])
-                user["balance"] = available_balance
+                # Если синхронизация не удалась (например, не нашли в YClients),
+                # сохраняем локальный баланс из users.balance
+                user["balance"] = user.get("balance", 0)
         except Exception as e:
             logger.warning(f"Could not sync balance with YClients, using local calculation: {e}")
             try:
-                available_balance = await get_user_available_balance(user["id"])
-                user["balance"] = available_balance
+                user["balance"] = user.get("balance", 0)
             except Exception as inner_e:
                 logger.error(f"Local balance calculation also failed: {inner_e}")
         

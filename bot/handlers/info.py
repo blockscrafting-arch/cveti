@@ -77,7 +77,7 @@ async def show_bonuses(message: types.Message):
             loyalty_max_spend_percentage = await get_setting('loyalty_max_spend_percentage', settings.LOYALTY_MAX_SPEND_PERCENTAGE)
             loyalty_expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
             response_text += (
-                f"\n\n💳 Можно оплатить до {int(float(loyalty_max_spend_percentage) * 100)}% от суммы чека"
+                f"\n\n💳 Можно оплатить до {_format_percent(loyalty_max_spend_percentage)}% от суммы чека"
                 f"\n⏰ Баллы действуют {int(loyalty_expiration_days)} дней"
             )
         await message.answer(response_text, parse_mode="Markdown")
@@ -160,14 +160,24 @@ async def _apply_placeholders(response_text: str) -> str:
     loyalty_expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
     replacements = {
         "{YCLIENTS_BOOKING_URL}": settings.YCLIENTS_BOOKING_URL,
-        "{LOYALTY_PERCENTAGE}": str(int(float(loyalty_percentage) * 100)),
-        "{LOYALTY_MAX_SPEND_PERCENTAGE}": str(int(float(loyalty_max_spend_percentage) * 100)),
+        "{LOYALTY_PERCENTAGE}": str(_format_percent(loyalty_percentage)),
+        "{LOYALTY_MAX_SPEND_PERCENTAGE}": str(_format_percent(loyalty_max_spend_percentage)),
         "{LOYALTY_EXPIRATION_DAYS}": str(int(loyalty_expiration_days)),
     }
     for placeholder, value in replacements.items():
         if placeholder in response_text:
             response_text = response_text.replace(placeholder, value)
     return response_text
+
+
+def _format_percent(value: float) -> int:
+    try:
+        percent = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if percent <= 1:
+        percent *= 100
+    return int(round(percent))
 
 
 @router.message(F.text)
