@@ -2,12 +2,35 @@
 Сервис для работы с Supabase Storage через нативный клиент Supabase (вместо S3)
 """
 import logging
+import json
+import time
 import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+DEBUG_LOG_PATHS = [
+    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
+    "/app/debug.log",
+    "/tmp/debug.log"
+]
+
+def _debug_log(payload: dict):
+    try:
+        payload.setdefault("sessionId", "debug-session")
+        payload.setdefault("runId", "run1")
+        payload["timestamp"] = int(time.time() * 1000)
+        line = json.dumps(payload, ensure_ascii=False)
+        for log_path in DEBUG_LOG_PATHS:
+            try:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+                break
+            except Exception:
+                continue
+    except Exception:
+        pass
 class StorageService:
     """Сервис для загрузки файлов в Supabase Storage"""
     
@@ -70,6 +93,20 @@ class StorageService:
             content_type = self._get_content_type(filename)
             # Предпочитаем S3 API (aioboto3), если настроены креды
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H3",
+                    "location": "bot/services/storage.py:upload_file.s3_attempt",
+                    "message": "s3 put_object attempt",
+                    "data": {
+                        "endpoint": self.s3_endpoint,
+                        "region": self.s3_region,
+                        "bucket": self.bucket,
+                        "content_length": len(file_content) if file_content else 0,
+                        "content_type": content_type
+                    }
+                })
+                # endregion
                 session = aioboto3.Session()
                 async with session.client(
                     "s3",
@@ -84,6 +121,17 @@ class StorageService:
                         Body=file_content,
                         ContentType=content_type
                     )
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H3",
+                    "location": "bot/services/storage.py:upload_file.s3_success",
+                    "message": "s3 put_object ok",
+                    "data": {
+                        "bucket": self.bucket,
+                        "key": file_path
+                    }
+                })
+                # endregion
             else:
                 # Фоллбек на нативный клиент Supabase (если есть storage)
                 try:
@@ -95,6 +143,16 @@ class StorageService:
                     if hasattr(res, 'error') and res.error:
                         raise Exception(str(res.error))
                 except Exception as upload_error:
+                    # region agent log
+                    _debug_log({
+                        "hypothesisId": "H3",
+                        "location": "bot/services/storage.py:upload_file.supabase_error",
+                        "message": "supabase upload error",
+                        "data": {
+                            "error_type": type(upload_error).__name__
+                        }
+                    })
+                    # endregion
                     error_str = str(upload_error)
                     if "Bucket not found" in error_str or "The resource was not found" in error_str:
                         logger.error(f"Bucket '{self.bucket}' not found. Please run the SQL creation script.")
@@ -105,6 +163,16 @@ class StorageService:
             return public_url
                 
         except Exception as e:
+            # region agent log
+            _debug_log({
+                "hypothesisId": "H3",
+                "location": "bot/services/storage.py:upload_file.error",
+                "message": "upload error",
+                "data": {
+                    "error_type": type(e).__name__
+                }
+            })
+            # endregion
             logger.error(f"Error uploading file to Supabase Storage: {e}", exc_info=True)
             return None
     

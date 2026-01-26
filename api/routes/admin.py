@@ -10,10 +10,32 @@ from aiogram import Bot
 import logging
 import json
 import re
+import time
 from datetime import datetime
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+DEBUG_LOG_PATHS = [
+    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
+    "/app/debug.log",
+    "/tmp/debug.log"
+]
+
+def _debug_log(payload: dict):
+    try:
+        payload.setdefault("sessionId", "debug-session")
+        payload.setdefault("runId", "run1")
+        payload["timestamp"] = int(time.time() * 1000)
+        line = json.dumps(payload, ensure_ascii=False)
+        for log_path in DEBUG_LOG_PATHS:
+            try:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+                break
+            except Exception:
+                continue
+    except Exception:
+        pass
 def _coerce_order(value):
     try:
         return int(value)
@@ -582,6 +604,17 @@ async def get_user(id: str, _: int = Depends(get_current_admin)):
 @router.put("/users/{id}")
 async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H1",
+            "location": "api/routes/admin.py:update_user",
+            "message": "admin update user",
+            "data": {
+                "keys": list(data.keys()),
+                "has_balance": "balance" in data
+            }
+        })
+        # endregion
         # Удаляем updated_at из данных, если он там есть - БД обновит автоматически через триггер или DEFAULT
         data.pop("updated_at", None)
         res = await supabase.table("users").update(data).eq("id", id).execute()
@@ -610,6 +643,18 @@ async def get_user_transactions(user_id: str, _: int = Depends(get_current_admin
 async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     """Создает транзакцию и обновляет баланс пользователя"""
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H2",
+            "location": "api/routes/admin.py:create_transaction",
+            "message": "admin create transaction",
+            "data": {
+                "user_id": user_id,
+                "amount": data.get("amount"),
+                "has_description": bool(data.get("description"))
+            }
+        })
+        # endregion
         # Проверяем пользователя
         user_res = await supabase.table("users").select("id").eq("id", user_id).single().execute()
         if not user_res.data:
