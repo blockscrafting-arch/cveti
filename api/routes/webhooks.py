@@ -210,35 +210,22 @@ async def telegram_webhook(request: Request):
             "message": "webhook entry",
             "data": {
                 "has_bot": _telegram_bot is not None,
-                "has_update_id": bool(update_id),
                 "update_type": update_type,
-                "has_message": "message" in update_data,
                 "has_text": bool(update_data.get("message", {}).get("text")),
-                "has_contact": bool(update_data.get("message", {}).get("contact"))
+                "is_start": update_data.get("message", {}).get("text", "").startswith("/start")
             }
         })
         # endregion
 
         # Создаем объект Update из данных с контекстом бота
         update = Update.model_validate(update_data, context={"bot": _telegram_bot})
-
-        # region agent log
-        _debug_log({
-            "hypothesisId": "H1",
-            "location": "api/routes/webhooks.py:telegram_webhook.validated",
-            "message": "update validated",
-            "data": {
-                "update_type": update_type
-            }
-        })
-        # endregion
         
         # Передаем обновление в Dispatcher для обработки
         await dp.feed_update(_telegram_bot, update)
 
         # region agent log
         _debug_log({
-            "hypothesisId": "H1",
+            "hypothesisId": "H2",
             "location": "api/routes/webhooks.py:telegram_webhook.feed_update",
             "message": "feed_update ok",
             "data": {
@@ -253,7 +240,7 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         # region agent log
         _debug_log({
-            "hypothesisId": "H1",
+            "hypothesisId": "H2",
             "location": "api/routes/webhooks.py:telegram_webhook.error",
             "message": "webhook error",
             "data": {

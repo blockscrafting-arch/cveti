@@ -31,7 +31,7 @@ async def cmd_start(message: types.Message):
 
     # region agent log
     _debug_log({
-        "hypothesisId": "H2",
+        "hypothesisId": "H3",
         "location": "bot/handlers/start.py:cmd_start.entry",
         "message": "start handler entry",
         "data": {
@@ -49,7 +49,7 @@ async def cmd_start(message: types.Message):
 
         # region agent log
         _debug_log({
-            "hypothesisId": "H3",
+            "hypothesisId": "H4",
             "location": "bot/handlers/start.py:cmd_start.db_lookup",
             "message": "db user lookup",
             "data": {
@@ -74,7 +74,7 @@ async def cmd_start(message: types.Message):
 
             # region agent log
             _debug_log({
-                "hypothesisId": "H4",
+                "hypothesisId": "H5",
                 "location": "bot/handlers/start.py:cmd_start.reply_new",
                 "message": "sent registration prompt",
                 "data": {
@@ -101,7 +101,7 @@ async def cmd_start(message: types.Message):
 
             # region agent log
             _debug_log({
-                "hypothesisId": "H4",
+                "hypothesisId": "H5",
                 "location": "bot/handlers/start.py:cmd_start.reply_existing",
                 "message": "sent main menu",
                 "data": {
@@ -112,7 +112,7 @@ async def cmd_start(message: types.Message):
     except Exception as e:
         # region agent log
         _debug_log({
-            "hypothesisId": "H5",
+            "hypothesisId": "H4",
             "location": "bot/handlers/start.py:cmd_start.error",
             "message": "start handler error",
             "data": {
