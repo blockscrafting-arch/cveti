@@ -4,8 +4,11 @@
 import logging
 import json
 import time
+import hashlib
+from urllib.parse import quote
 from botocore.config import Config
 from botocore.exceptions import ClientError
+import httpx
 import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
@@ -95,14 +98,61 @@ class StorageService:
             public_url = self._get_public_url(file_path)
             content_type = self._get_content_type(filename)
             # Предпочитаем S3 API (aioboto3), если настроены креды
-            def _upload_via_supabase() -> None:
-                res = supabase.storage.from_(self.bucket).upload(
-                    path=file_path,
-                    file=file_content,
-                    file_options={"content-type": content_type, "upsert": "true"}
+            async def _upload_via_supabase() -> None:
+                if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
+                    raise Exception("Supabase storage not configured")
+                storage_url = (
+                    f"{settings.SUPABASE_URL.rstrip('/')}"
+                    f"/storage/v1/object/{self.bucket}/{quote(file_path, safe='/')}"
                 )
-                if hasattr(res, 'error') and res.error:
-                    raise Exception(str(res.error))
+                headers = {
+                    "Authorization": f"Bearer {settings.SUPABASE_KEY}",
+                    "apikey": settings.SUPABASE_KEY,
+                    "Content-Type": content_type,
+                    "x-upsert": "true"
+                }
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H4",
+                    "location": "bot/services/storage.py:upload_file.supabase_http_attempt",
+                    "message": "supabase storage http upload attempt",
+                    "data": {
+                        "bucket": self.bucket,
+                        "key": file_path
+                    }
+                })
+                # endregion
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        storage_url,
+                        headers=headers,
+                        content=file_content
+                    )
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H4",
+                    "location": "bot/services/storage.py:upload_file.supabase_http_response",
+                    "message": "supabase storage http response",
+                    "data": {
+                        "status_code": response.status_code
+                    }
+                })
+                # endregion
+                if response.status_code >= 400:
+                    raise Exception(f"Supabase storage upload failed: {response.status_code}")
+
+            payload_sha256 = hashlib.sha256(file_content).hexdigest() if file_content else None
+            # region agent log
+            _debug_log({
+                "hypothesisId": "H5",
+                "location": "bot/services/storage.py:upload_file.payload_hash",
+                "message": "payload sha256",
+                "data": {
+                    "content_length": len(file_content) if file_content else 0,
+                    "payload_sha256": payload_sha256
+                }
+            })
+            # endregion
 
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
                 session = aioboto3.Session()
@@ -161,6 +211,28 @@ class StorageService:
                             aws_secret_access_key=self.s3_secret_key,
                             config=attempt["config"]
                         ) as s3:
+                            def _log_s3_headers(request, **kwargs):
+                                try:
+                                    headers = request.headers or {}
+                                    # region agent log
+                                    _debug_log({
+                                        "hypothesisId": "H5",
+                                        "location": "bot/services/storage.py:upload_file.s3_headers",
+                                        "message": "s3 request headers",
+                                        "data": {
+                                            "attempt": attempt["label"],
+                                            "x_amz_content_sha256": headers.get("x-amz-content-sha256") or headers.get("X-Amz-Content-SHA256"),
+                                            "content_length": headers.get("content-length") or headers.get("Content-Length"),
+                                            "transfer_encoding": headers.get("transfer-encoding") or headers.get("Transfer-Encoding"),
+                                            "content_encoding": headers.get("content-encoding") or headers.get("Content-Encoding"),
+                                            "expect": headers.get("expect") or headers.get("Expect")
+                                        }
+                                    })
+                                    # endregion
+                                except Exception:
+                                    pass
+
+                            s3.meta.events.register("before-send.s3.PutObject", _log_s3_headers)
                             await s3.put_object(
                                 Bucket=self.bucket,
                                 Key=file_path,
@@ -212,7 +284,19 @@ class StorageService:
                         if error_code != "XAmzContentSHA256Mismatch":
                             raise
                 if not uploaded and last_error:
-                    if last_error_code == "XAmzContentSHA256Mismatch":
+                    if last_error_code == "XAmzContentSHA256Mismatch" and not settings.S3_SUPABASE_FALLBACK_ENABLED:
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H5",
+                            "location": "bot/services/storage.py:upload_file.supabase_fallback_disabled",
+                            "message": "supabase fallback disabled",
+                            "data": {
+                                "bucket": self.bucket,
+                                "key": file_path
+                            }
+                        })
+                        # endregion
+                    if last_error_code == "XAmzContentSHA256Mismatch" and settings.S3_SUPABASE_FALLBACK_ENABLED:
                         # region agent log
                         _debug_log({
                             "hypothesisId": "H3",
@@ -225,7 +309,7 @@ class StorageService:
                         })
                         # endregion
                         try:
-                            _upload_via_supabase()
+                            await _upload_via_supabase()
                             # region agent log
                             _debug_log({
                                 "hypothesisId": "H3",
@@ -256,7 +340,9 @@ class StorageService:
             else:
                 # Фоллбек на нативный клиент Supabase (если есть storage)
                 try:
-                    _upload_via_supabase()
+                    if not settings.S3_SUPABASE_FALLBACK_ENABLED:
+                        raise Exception("Supabase storage fallback disabled")
+                    await _upload_via_supabase()
                 except Exception as upload_error:
                     # region agent log
                     _debug_log({

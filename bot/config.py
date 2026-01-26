@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "CVETi")
     SUPABASE_STORAGE_PUBLIC_URL_BASE: str = os.getenv("SUPABASE_STORAGE_PUBLIC_URL_BASE", "")
     STORAGE_PUBLIC_URL_TEMPLATE: str = os.getenv("STORAGE_PUBLIC_URL_TEMPLATE", "")
+    S3_SUPABASE_FALLBACK_ENABLED: bool = Field(default=False)
     
     # YClients
     YCLIENTS_PARTNER_TOKEN: str = os.getenv("YCLIENTS_PARTNER_TOKEN", "")  # Токен партнера (разработчика)
