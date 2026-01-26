@@ -658,6 +658,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             }
         })
         # endregion
+        print(f"[admin_tx] raw_amount={data.get('amount')} user_id={user_id}")
         # Проверяем пользователя
         user_res = await supabase.table("users").select("id").eq("id", user_id).single().execute()
         if not user_res.data:
@@ -666,10 +667,13 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
         try:
             amount = int(data.get("amount", 0))
         except (TypeError, ValueError):
+            print("[admin_tx] invalid_amount")
             raise HTTPException(status_code=400, detail="Invalid amount")
         
         if amount == 0:
+            print("[admin_tx] zero_amount")
             raise HTTPException(status_code=400, detail="Amount cannot be zero")
+        print(f"[admin_tx] amount_parsed={amount}")
         
         description = data.get("description", "Ручное изменение баланса")
         
@@ -678,6 +682,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             await sync_user_with_yclients(int(user_id))
             available_balance = await get_user_available_balance(int(user_id))
             if abs(amount) > available_balance:
+                print(f"[admin_tx] insufficient_balance available={available_balance} amount={amount}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Недостаточно баллов. Доступно: {available_balance}"
@@ -688,6 +693,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             amount=amount,
             description=description
         )
+        print(f"[admin_tx] yclients_result success={success} message={message}")
         if not success:
             raise HTTPException(status_code=400, detail=message)
 
