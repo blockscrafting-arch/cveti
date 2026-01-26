@@ -2147,6 +2147,91 @@ function updateBroadcastRecipients() {
     }
 }
 
+const IMAGE_MAX_DIMENSION = 2560;
+const IMAGE_COMPRESS_THRESHOLD_MB = 3;
+const IMAGE_COMPRESS_QUALITY = 0.86;
+
+async function _loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(img);
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Image load failed'));
+        };
+        img.src = objectUrl;
+    });
+}
+
+async function compressImageFile(file) {
+    const isImage = file?.type && file.type.startsWith('image/');
+    if (!isImage || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+        return { file, compressed: false };
+    }
+
+    const sizeMb = file.size / (1024 * 1024);
+    const shouldTryCompress = sizeMb >= IMAGE_COMPRESS_THRESHOLD_MB;
+    if (!shouldTryCompress) {
+        return { file, compressed: false };
+    }
+
+    let source;
+    try {
+        if ('createImageBitmap' in window) {
+            source = await createImageBitmap(file);
+        } else {
+            source = await _loadImageFromFile(file);
+        }
+    } catch (error) {
+        return { file, compressed: false };
+    }
+
+    const width = source.width || source.naturalWidth;
+    const height = source.height || source.naturalHeight;
+    if (!width || !height) {
+        if (source.close) source.close();
+        return { file, compressed: false };
+    }
+
+    const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(width, height));
+    if (scale === 1 && sizeMb < IMAGE_COMPRESS_THRESHOLD_MB * 1.2) {
+        if (source.close) source.close();
+        return { file, compressed: false };
+    }
+
+    const targetWidth = Math.max(1, Math.round(width * scale));
+    const targetHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) {
+        if (source.close) source.close();
+        return { file, compressed: false };
+    }
+    ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+    if (source.close) source.close();
+
+    const outputType = 'image/jpeg';
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, IMAGE_COMPRESS_QUALITY));
+    if (!blob) {
+        return { file, compressed: false };
+    }
+
+    const shouldReplace = blob.size < file.size || scale < 1;
+    if (!shouldReplace) {
+        return { file, compressed: false };
+    }
+
+    const baseName = (file.name || 'image').replace(/\.[^/.]+$/, '') || 'image';
+    const newFile = new File([blob], `${baseName}.jpg`, { type: outputType });
+    return { file: newFile, compressed: true };
+}
+
 async function handleImageUpload(file, prefix) {
     if (!file) return;
     
@@ -2163,13 +2248,23 @@ async function handleImageUpload(file, prefix) {
     
     try {
         const maxSizeMb = 50;
-        if (file.size > maxSizeMb * 1024 * 1024) {
+        if (statusEl) {
+            statusEl.textContent = 'Подготовка изображения...';
+            statusEl.className = 'mt-2 text-xs text-stone-500';
+        }
+
+        const { file: preparedFile, compressed } = await compressImageFile(file);
+        const uploadFile = preparedFile || file;
+        if (compressed && statusEl) {
+            statusEl.textContent = 'Сжатие завершено, загружаю...';
+        }
+        if (uploadFile.size > maxSizeMb * 1024 * 1024) {
             throw new Error(`Файл больше ${maxSizeMb} МБ`);
         }
 
         // Создаем FormData для отправки файла
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', uploadFile);
         
         // Определяем папку в зависимости от типа
         let folder = 'images';
