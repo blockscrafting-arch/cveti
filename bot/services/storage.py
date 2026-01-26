@@ -5,6 +5,7 @@ import logging
 import json
 import time
 from botocore.config import Config
+from botocore.exceptions import ClientError
 import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
@@ -95,53 +96,112 @@ class StorageService:
             content_type = self._get_content_type(filename)
             # Предпочитаем S3 API (aioboto3), если настроены креды
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
-                # region agent log
-                _debug_log({
-                    "hypothesisId": "H3",
-                    "location": "bot/services/storage.py:upload_file.s3_attempt",
-                    "message": "s3 put_object attempt",
-                    "data": {
-                        "endpoint": self.s3_endpoint,
-                        "region": self.s3_region,
-                        "bucket": self.bucket,
-                        "content_length": len(file_content) if file_content else 0,
-                        "content_type": content_type
-                    }
-                })
-                # endregion
-                print(f"[s3_upload] endpoint={self.s3_endpoint} region={self.s3_region} bucket={self.bucket} bytes={len(file_content) if file_content else 0} type={content_type}")
                 session = aioboto3.Session()
-                async with session.client(
-                    "s3",
-                    endpoint_url=self.s3_endpoint,
-                    region_name=self.s3_region,
-                    aws_access_key_id=self.s3_access_key,
-                    aws_secret_access_key=self.s3_secret_key,
-                    config=Config(
-                        signature_version="s3v4",
-                        s3={"addressing_style": "path", "payload_signing_enabled": False}
-                    )
-                ) as s3:
-                    await s3.put_object(
-                        Bucket=self.bucket,
-                        Key=file_path,
-                        Body=file_content,
-                        ContentType=content_type,
-                        ContentLength=len(file_content) if file_content else 0
-                    )
-                # region agent log
-                _debug_log({
-                    "hypothesisId": "H3",
-                    "location": "bot/services/storage.py:upload_file.s3_success",
-                    "message": "s3 put_object ok",
-                    "data": {
-                        "bucket": self.bucket,
-                        "key": file_path,
-                        "public_url": public_url
+                attempts = [
+                    {
+                        "label": "signed",
+                        "payload_signing_enabled": True,
+                        "config": Config(
+                            signature_version="s3v4",
+                            s3={"addressing_style": "path"}
+                        )
+                    },
+                    {
+                        "label": "unsigned",
+                        "payload_signing_enabled": False,
+                        "config": Config(
+                            signature_version="s3v4",
+                            s3={"addressing_style": "path", "payload_signing_enabled": False}
+                        )
                     }
-                })
-                # endregion
-                print(f"[s3_upload] ok bucket={self.bucket} key={file_path}")
+                ]
+                uploaded = False
+                last_error = None
+                for attempt in attempts:
+                    # region agent log
+                    _debug_log({
+                        "hypothesisId": "H3",
+                        "location": "bot/services/storage.py:upload_file.s3_attempt",
+                        "message": "s3 put_object attempt",
+                        "data": {
+                            "endpoint": self.s3_endpoint,
+                            "region": self.s3_region,
+                            "bucket": self.bucket,
+                            "content_length": len(file_content) if file_content else 0,
+                            "content_type": content_type,
+                            "attempt": attempt["label"],
+                            "payload_signing_enabled": attempt["payload_signing_enabled"]
+                        }
+                    })
+                    # endregion
+                    print(
+                        "[s3_upload] "
+                        f"attempt={attempt['label']} "
+                        f"payload_signing={attempt['payload_signing_enabled']} "
+                        f"endpoint={self.s3_endpoint} region={self.s3_region} "
+                        f"bucket={self.bucket} bytes={len(file_content) if file_content else 0} "
+                        f"type={content_type}"
+                    )
+                    try:
+                        async with session.client(
+                            "s3",
+                            endpoint_url=self.s3_endpoint,
+                            region_name=self.s3_region,
+                            aws_access_key_id=self.s3_access_key,
+                            aws_secret_access_key=self.s3_secret_key,
+                            config=attempt["config"]
+                        ) as s3:
+                            await s3.put_object(
+                                Bucket=self.bucket,
+                                Key=file_path,
+                                Body=file_content,
+                                ContentType=content_type,
+                                ContentLength=len(file_content) if file_content else 0
+                            )
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H3",
+                            "location": "bot/services/storage.py:upload_file.s3_success",
+                            "message": "s3 put_object ok",
+                            "data": {
+                                "bucket": self.bucket,
+                                "key": file_path,
+                                "public_url": public_url,
+                                "attempt": attempt["label"]
+                            }
+                        })
+                        # endregion
+                        print(f"[s3_upload] ok attempt={attempt['label']} bucket={self.bucket} key={file_path}")
+                        uploaded = True
+                        break
+                    except ClientError as err:
+                        last_error = err
+                        error_code = None
+                        if err.response:
+                            error_code = err.response.get("Error", {}).get("Code")
+                        # region agent log
+                        _debug_log({
+                            "hypothesisId": "H3",
+                            "location": "bot/services/storage.py:upload_file.s3_error",
+                            "message": "s3 put_object error",
+                            "data": {
+                                "attempt": attempt["label"],
+                                "payload_signing_enabled": attempt["payload_signing_enabled"],
+                                "error_code": error_code,
+                                "error_type": type(err).__name__
+                            }
+                        })
+                        # endregion
+                        print(
+                            "[s3_upload] "
+                            f"error attempt={attempt['label']} "
+                            f"code={error_code} type={type(err).__name__} "
+                            f"message={str(err)}"
+                        )
+                        if error_code != "XAmzContentSHA256Mismatch":
+                            raise
+                if not uploaded and last_error:
+                    raise last_error
             else:
                 # Фоллбек на нативный клиент Supabase (если есть storage)
                 try:
