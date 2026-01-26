@@ -58,11 +58,17 @@ async def sync_user_with_yclients(user_id: int) -> Optional[Dict[str, Any]]:
             logger.warning(f"Could not find YClients ID for user {user_id}")
             return None
 
-        # 2. Получаем информацию о лояльности
+        # 2. Проверяем наличие карты лояльности
+        loyalty_card = await yclients.get_client_loyalty_card(yclients_id)
+        if not loyalty_card:
+            logger.info(f"No loyalty card found for user {user_id} (yclients_id: {yclients_id})")
+            return {"balance": old_balance, "diff": 0, "no_card": True}
+
+        # 3. Получаем информацию о лояльности
         loyalty_info = await yclients.get_client_loyalty_info(yclients_id)
         if loyalty_info:
             # Извлекаем данные карты
-            card_number = loyalty_info.get("number")
+            card_number = loyalty_info.get("number") or loyalty_card.get("number")
             card_status = "Бонусная карта"
             if "type" in loyalty_info and isinstance(loyalty_info["type"], dict):
                 card_status = loyalty_info["type"].get("title", card_status)
@@ -83,7 +89,7 @@ async def sync_user_with_yclients(user_id: int) -> Optional[Dict[str, Any]]:
             except (ValueError, TypeError):
                 balance = 0
             
-            # 3. Если баланс изменился извне (не через нашу систему), логируем это и корректируем FIFO
+            # 4. Если баланс изменился извне (не через нашу систему), логируем это и корректируем FIFO
             diff = balance - old_balance
             if diff != 0:
                 expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
@@ -109,7 +115,7 @@ async def sync_user_with_yclients(user_id: int) -> Optional[Dict[str, Any]]:
                         "updated_at": datetime.utcnow().isoformat()
                     }).eq("id", user_id).execute()
 
-            # 4. Обновляем дополнительные поля (номер карты, статус, время синхронизации)
+            # 5. Обновляем дополнительные поля (номер карты, статус, время синхронизации)
             await supabase.table("users").update({
                 "loyalty_card_number": card_number,
                 "loyalty_status": card_status,
@@ -165,6 +171,10 @@ async def process_loyalty_payment(phone: str, amount: float, visit_id: int):
             logger.warning(f"YClients sync failed for user {user['id']} (visit_id: {visit_id})")
             return None, "Не удалось синхронизировать баланс с YClients"
         
+        if sync_result.get("no_card"):
+            logger.info(f"User {user['id']} has no loyalty card, skipping reward")
+            return user["tg_id"], 0
+
         diff = int(sync_result.get("diff") or 0)
         points_awarded = max(diff, 0)
         logger.info(

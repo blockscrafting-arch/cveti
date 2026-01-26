@@ -12,6 +12,35 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
+async def _forward_support_message(message: types.Message, user: dict) -> bool:
+    if not settings.ADMIN_IDS:
+        await supabase.table("users").update({"support_mode": False}).eq("id", user["id"]).execute()
+        await message.answer("❌ Поддержка временно недоступна.")
+        return False
+
+    name = user.get("name") or message.from_user.full_name or "Пользователь"
+    phone = user.get("phone") or "не указан"
+    tg_id = message.from_user.id
+    header = (
+        "🆘 **Новое сообщение в поддержку**\n"
+        f"**Имя:** {name}\n"
+        f"**Телефон:** {phone}\n"
+        f"**TG ID:** `{tg_id}`"
+    )
+    for admin_id in settings.ADMIN_IDS:
+        try:
+            await message.bot.send_message(admin_id, header, parse_mode="Markdown")
+            await message.copy_to(admin_id)
+        except Exception as forward_err:
+            logger.warning(f"Support message forward failed to {admin_id}: {forward_err}")
+            if message.text:
+                await message.bot.send_message(admin_id, message.text)
+
+    await supabase.table("users").update({"support_mode": False}).eq("id", user["id"]).execute()
+    await message.answer("✅ Сообщение отправлено. Мы ответим как можно скорее.")
+    return True
+
+
 async def send_button_response(message: types.Message, button_text: str, inline_keyboard=None):
     """Отправляет ответ для кнопки, используя текст из БД"""
     response_text = await get_button_response(button_text)
@@ -65,7 +94,37 @@ async def show_services(message: types.Message):
 @router.message(F.text == "💬 Поддержка")
 async def show_support(message: types.Message):
     """Показывает информацию о поддержке"""
-    await send_button_response(message, "💬 Поддержка", get_support_inline_keyboard())
+    tg_id = message.from_user.id
+    try:
+        user_res = await supabase.table("users").select("id").eq("tg_id", tg_id).execute()
+        if not user_res.data:
+            await message.answer(
+                "❌ Пожалуйста, зарегистрируйтесь, нажав /start",
+                parse_mode="Markdown"
+            )
+            return
+
+        user_id = user_res.data[0]["id"]
+        await supabase.table("users").update({"support_mode": True}).eq("id", user_id).execute()
+
+        response_text = await get_button_response("💬 Поддержка")
+        if response_text:
+            response_text = await _apply_placeholders(response_text)
+        else:
+            response_text = "Мы на связи и готовы помочь."
+
+        response_text += (
+            "\n\n✍️ Напишите ваше сообщение одним текстом — "
+            "я сразу отправлю его администратору."
+        )
+        await message.answer(
+            response_text,
+            reply_markup=get_support_inline_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Error in show_support: {e}", exc_info=True)
+        await message.answer("❌ Не удалось открыть поддержку. Попробуйте позже.")
 
 
 @router.message(F.text == "⚙️ Админка")
@@ -117,6 +176,31 @@ async def show_custom_button_response(message: types.Message):
     button_text = message.text or ""
     if not button_text:
         return
+    tg_id = message.from_user.id
+    try:
+        user_res = await supabase.table("users")\
+            .select("id,name,phone,support_mode")\
+            .eq("tg_id", tg_id)\
+            .execute()
+        if user_res.data and user_res.data[0].get("support_mode"):
+            user = user_res.data[0]
+            known_buttons = {
+                "📅 Записаться",
+                "👤 Мой профиль",
+                "🌸 Наши услуги",
+                "🎁 Бонусы",
+                "📍 Контакты",
+                "💬 Поддержка",
+                "⚙️ Админка",
+            }
+            if button_text in known_buttons:
+                await supabase.table("users").update({"support_mode": False}).eq("id", user["id"]).execute()
+                return
+
+            await _forward_support_message(message, user)
+            return
+    except Exception as e:
+        logger.error(f"Error handling support message: {e}", exc_info=True)
     known_buttons = {
         "📅 Записаться",
         "👤 Мой профиль",
@@ -157,3 +241,19 @@ async def show_custom_button_response(message: types.Message):
         await message.answer(response_text, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Error handling custom button '{button_text}': {e}", exc_info=True)
+
+
+@router.message(F.photo | F.document | F.video | F.voice | F.audio | F.sticker)
+async def handle_support_media(message: types.Message):
+    """Пересылает медиа в поддержку, если включен режим поддержки."""
+    tg_id = message.from_user.id
+    try:
+        user_res = await supabase.table("users")\
+            .select("id,name,phone,support_mode")\
+            .eq("tg_id", tg_id)\
+            .execute()
+        if not user_res.data or not user_res.data[0].get("support_mode"):
+            return
+        await _forward_support_message(message, user_res.data[0])
+    except Exception as e:
+        logger.error(f"Error handling support media: {e}", exc_info=True)

@@ -40,7 +40,10 @@ async def handle_contact(message: types.Message):
             
             # Сразу синхронизируем баланс с YClients
             sync_result = await sync_user_with_yclients(user["id"])
-            current_balance = sync_result.get("balance") if sync_result else user.get("balance", 0)
+            if sync_result and sync_result.get("no_card"):
+                current_balance = 0
+            else:
+                current_balance = sync_result.get("balance") if sync_result else user.get("balance", 0)
             
             text = (
                 f"✨ **Ваш профиль найден!**\n\n"
@@ -78,7 +81,10 @@ async def handle_contact(message: types.Message):
             
             # Пытаемся синхронизировать с YClients (возможно клиент уже там есть)
             sync_result = await sync_user_with_yclients(user_id)
-            final_balance = sync_result.get("balance") if sync_result else 0
+            if sync_result and sync_result.get("no_card"):
+                final_balance = 0
+            else:
+                final_balance = sync_result.get("balance") if sync_result else 0
             
             if welcome_bonus > 0:
                 bonus_line = f"🎁 Вам начислено **{welcome_bonus} приветственных баллов**!\n\n"
@@ -131,7 +137,10 @@ async def show_profile(message: types.Message):
         
         # Синхронизируем баланс перед показом
         sync_result = await sync_user_with_yclients(user["id"])
-        current_balance = sync_result.get("balance") if sync_result else user.get("balance", 0)
+        if sync_result and sync_result.get("no_card"):
+            current_balance = 0
+        else:
+            current_balance = sync_result.get("balance") if sync_result else user.get("balance", 0)
         
         # Определяем уровень с эмодзи
         level_emoji = {
