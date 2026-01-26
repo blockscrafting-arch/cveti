@@ -230,6 +230,32 @@ class StorageService:
                         detail = f"{detail} {error_code}"
                     raise Exception(detail)
 
+            async def _probe_public_url(label: str, url: str) -> None:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                        response = await client.head(url)
+                    status_code = response.status_code
+                    content_type = response.headers.get("content-type")
+                    error_type = None
+                except Exception as probe_error:
+                    status_code = None
+                    content_type = None
+                    error_type = type(probe_error).__name__
+                # region agent log
+                _debug_log({
+                    "hypothesisId": "H7",
+                    "location": "bot/services/storage.py:upload_file.public_url_probe",
+                    "message": "public url head probe",
+                    "data": {
+                        "label": label,
+                        "url": url,
+                        "status_code": status_code,
+                        "content_type": content_type,
+                        "error_type": error_type
+                    }
+                })
+                # endregion
+
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
                 session = aioboto3.Session()
                 attempts = [
@@ -504,6 +530,16 @@ class StorageService:
                     raise upload_error
 
             logger.info(f"File uploaded successfully: {file_path}")
+            if uploaded:
+                try:
+                    await _probe_public_url("public_url", public_url)
+                    if self.s3_endpoint:
+                        endpoint = self.s3_endpoint.rstrip("/")
+                        key_path = quote(file_path, safe="/")
+                        s3_url = f"{endpoint}/{self.bucket}/{key_path}"
+                        await _probe_public_url("s3_endpoint", s3_url)
+                except Exception:
+                    pass
             return public_url
                 
         except Exception as e:
