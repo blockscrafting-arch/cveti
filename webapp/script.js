@@ -1775,7 +1775,14 @@ async function handleTransactionSubmit(e, userId) {
             body: JSON.stringify(data)
         });
         
-        if (!response.ok) throw new Error('Transaction error');
+        if (!response.ok) {
+            let detail = 'Ошибка при создании транзакции';
+            try {
+                const body = await response.json();
+                if (body && body.detail) detail = body.detail;
+            } catch (e) {}
+            throw new Error(detail);
+        }
         
         tg.HapticFeedback.notificationOccurred('success');
         closeAdminModal();
@@ -1786,7 +1793,7 @@ async function handleTransactionSubmit(e, userId) {
         }, 350);
     } catch (error) {
         console.error("Transaction error:", error);
-        alert("Ошибка при создании транзакции");
+        alert(error.message || "Ошибка при создании транзакции");
     }
 }
 
@@ -2619,7 +2626,14 @@ async function handleAdminSubmit(e) {
                 body: JSON.stringify(data)
             });
             
-            if (!response.ok) throw new Error('Save error');
+            if (!response.ok) {
+                let detail = 'Ошибка при сохранении';
+                try {
+                    const body = await response.json();
+                    if (body && body.detail) detail = body.detail;
+                } catch (e) {}
+                throw new Error(detail);
+            }
             
             tg.HapticFeedback.notificationOccurred('success');
             closeAdminModal();
@@ -2627,7 +2641,7 @@ async function handleAdminSubmit(e) {
             return;
         } catch (error) {
             console.error("Save error:", error);
-            alert("Ошибка при сохранении");
+            alert(error.message || "Ошибка при сохранении");
             return;
         }
     }
