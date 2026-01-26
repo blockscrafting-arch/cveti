@@ -195,6 +195,20 @@ async def upload_file(
         
         if not public_url:
             raise HTTPException(status_code=500, detail="Failed to upload file")
+
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H8",
+            "location": "api/routes/admin.py:upload_file.response",
+            "message": "upload response url",
+            "data": {
+                "folder": folder,
+                "filename": filename,
+                "returned_url": public_url,
+                "size": len(file_content)
+            }
+        })
+        # endregion
         
         return {
             "url": public_url,
@@ -243,6 +257,17 @@ async def create_master(data: Dict[str, Any], _: int = Depends(get_current_admin
 @router.put("/masters/{id}")
 async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H8",
+            "location": "api/routes/admin.py:update_master",
+            "message": "update master image urls",
+            "data": {
+                "photo_url": data.get("photo_url"),
+                "image_url": data.get("image_url")
+            }
+        })
+        # endregion
         res = await supabase.table("masters").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -378,6 +403,17 @@ async def create_service(data: Dict[str, Any], _: int = Depends(get_current_admi
 @router.put("/services/{id}")
 async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H8",
+            "location": "api/routes/admin.py:update_service",
+            "message": "update service image urls",
+            "data": {
+                "image_url": data.get("image_url"),
+                "photo_url": data.get("photo_url")
+            }
+        })
+        # endregion
         res = await supabase.table("services").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
@@ -508,6 +544,17 @@ async def create_promotion(data: Dict[str, Any], _: int = Depends(get_current_ad
 @router.put("/promotions/{id}")
 async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H8",
+            "location": "api/routes/admin.py:update_promotion",
+            "message": "update promotion image urls",
+            "data": {
+                "image_url": data.get("image_url"),
+                "photo_url": data.get("photo_url")
+            }
+        })
+        # endregion
         res = await supabase.table("promotions").update(data).eq("id", id).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
