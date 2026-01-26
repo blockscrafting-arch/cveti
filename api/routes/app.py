@@ -3,6 +3,7 @@ from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import get_user_available_balance, sync_user_with_yclients
 from bot.services.settings import get_setting
+from bot.services.storage import rewrite_storage_public_url
 from bot.services.yclients_api import yclients
 from bot.config import settings
 from typing import Optional
@@ -113,11 +114,24 @@ async def get_app_content():
         promotions_res = await supabase.table("promotions").select("*").eq("is_active", True).order("order").order("id").execute()
         loyalty_max_spend_percentage = await get_setting('loyalty_max_spend_percentage', settings.LOYALTY_MAX_SPEND_PERCENTAGE)
         loyalty_expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
+
+        services = services_res.data if services_res.data else []
+        masters = masters_res.data if masters_res.data else []
+        promotions = promotions_res.data if promotions_res.data else []
+        for item in services:
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+        for item in masters:
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+        for item in promotions:
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
         
         return {
-            "services": services_res.data if services_res.data else [],
-            "masters": masters_res.data if masters_res.data else [],
-            "promotions": promotions_res.data if promotions_res.data else [],
+            "services": services,
+            "masters": masters,
+            "promotions": promotions,
             "booking_url": settings.YCLIENTS_BOOKING_URL,
             "storage_public_url_base": settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL,
             "loyalty_max_spend_percentage": loyalty_max_spend_percentage,

@@ -48,6 +48,29 @@ def _debug_log(payload: dict):
             print(f"[debug_log] {line}")
     except Exception:
         pass
+
+def rewrite_storage_public_url(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return url
+    base = (settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or "").strip().rstrip("/")
+    endpoint = (settings.SUPABASE_STORAGE_S3_ENDPOINT or "").strip().rstrip("/")
+    if not base or not endpoint:
+        return url
+    if url.startswith(f"{base}/"):
+        new_url = f"{endpoint}{url[len(base):]}"
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H9",
+            "location": "bot/services/storage.py:rewrite_storage_public_url",
+            "message": "rewrite public storage url",
+            "data": {
+                "from_base": base,
+                "to_base": endpoint
+            }
+        })
+        # endregion
+        return new_url
+    return url
 class StorageService:
     """Сервис для загрузки файлов в Supabase Storage"""
     

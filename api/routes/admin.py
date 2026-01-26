@@ -2,7 +2,7 @@ from fastapi import APIRouter, Header, HTTPException, Depends, Query, Background
 from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.notifications import send_broadcast_message
-from bot.services.storage import get_storage_service
+from bot.services.storage import get_storage_service, rewrite_storage_public_url
 from bot.services.loyalty import apply_yclients_manual_transaction, get_user_available_balance, sync_user_with_yclients
 from bot.services.settings import get_setting
 from bot.config import settings
@@ -228,13 +228,21 @@ async def get_masters(_: int = Depends(get_current_admin)):
     try:
         # Сортируем по order, затем по id для стабильности
         res = await supabase.table("masters").select("*").order("order").order("id").execute()
-        return res.data if res.data else []
+        data = res.data if res.data else []
+        for item in data:
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+        return data
     except Exception as e:
         # Если поле order не существует, сортируем по name
         logger.warning(f"Order field may not exist, trying fallback: {e}")
         try:
             res = await supabase.table("masters").select("*").order("name").execute()
-            return res.data if res.data else []
+            data = res.data if res.data else []
+            for item in data:
+                item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+                item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+            return data
         except Exception as e2:
             logger.error(f"Error in get_masters: {e2}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
@@ -374,13 +382,21 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
 async def get_services(_: int = Depends(get_current_admin)):
     try:
         res = await supabase.table("services").select("*").order("order").order("id").execute()
-        return res.data if res.data else []
+        data = res.data if res.data else []
+        for item in data:
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+        return data
     except Exception as e:
         # Если поле order не существует, сортируем по title
         logger.warning(f"Order field may not exist, trying fallback: {e}")
         try:
             res = await supabase.table("services").select("*").order("title").execute()
-            return res.data if res.data else []
+            data = res.data if res.data else []
+            for item in data:
+                item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+                item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+            return data
         except Exception as e2:
             logger.error(f"Error in get_services: {e2}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
@@ -515,13 +531,21 @@ async def get_promotions(_: int = Depends(get_current_admin)):
     try:
         # Пробуем сортировать по order, если поле существует
         res = await supabase.table("promotions").select("*").order("order").order("id").execute()
-        return res.data if res.data else []
+        data = res.data if res.data else []
+        for item in data:
+            item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+            item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+        return data
     except Exception as e:
         # Если поле order не существует, сортируем по id
         logger.warning(f"Order field may not exist, trying fallback: {e}")
         try:
             res = await supabase.table("promotions").select("*").order("id", desc=True).execute()
-            return res.data if res.data else []
+            data = res.data if res.data else []
+            for item in data:
+                item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
+                item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
+            return data
         except Exception as e2:
             logger.error(f"Error in get_promotions: {e2}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
