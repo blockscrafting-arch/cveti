@@ -128,24 +128,30 @@ async def get_app_content():
             item["image_url"] = rewrite_storage_public_url(item.get("image_url"))
             item["photo_url"] = rewrite_storage_public_url(item.get("photo_url"))
         
+        storage_public_url_base = settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL
+        if settings.SUPABASE_STORAGE_S3_ENDPOINT:
+            storage_public_url_base = settings.SUPABASE_STORAGE_S3_ENDPOINT
         return {
             "services": services,
             "masters": masters,
             "promotions": promotions,
             "booking_url": settings.YCLIENTS_BOOKING_URL,
-            "storage_public_url_base": settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL,
+            "storage_public_url_base": storage_public_url_base,
             "loyalty_max_spend_percentage": loyalty_max_spend_percentage,
             "loyalty_expiration_days": loyalty_expiration_days
         }
     except Exception as e:
         logger.error(f"Database error in get_app_content: {e}", exc_info=True)
         # Возвращаем пустые списки при ошибке БД
+        storage_public_url_base = settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL
+        if settings.SUPABASE_STORAGE_S3_ENDPOINT:
+            storage_public_url_base = settings.SUPABASE_STORAGE_S3_ENDPOINT
         return {
             "services": [],
             "masters": [],
             "promotions": [],
             "booking_url": settings.YCLIENTS_BOOKING_URL,
-            "storage_public_url_base": settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or settings.SUPABASE_URL,
+            "storage_public_url_base": storage_public_url_base,
             "loyalty_max_spend_percentage": settings.LOYALTY_MAX_SPEND_PERCENTAGE,
             "loyalty_expiration_days": settings.LOYALTY_EXPIRATION_DAYS
         }

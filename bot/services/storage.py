@@ -54,9 +54,35 @@ def rewrite_storage_public_url(url: Optional[str]) -> Optional[str]:
         return url
     base = (settings.SUPABASE_STORAGE_PUBLIC_URL_BASE or "").strip().rstrip("/")
     endpoint = (settings.SUPABASE_STORAGE_S3_ENDPOINT or "").strip().rstrip("/")
-    if not base or not endpoint:
+    bucket = (settings.SUPABASE_STORAGE_BUCKET or "").strip()
+    if not endpoint:
         return url
-    if url.startswith(f"{base}/"):
+    if url.startswith(endpoint + "/"):
+        return url
+    prefix = "/storage/v1/object/public/"
+    parsed = urlparse(url)
+    path = parsed.path if parsed.scheme else url
+    if path.startswith(prefix) and bucket:
+        rest = path[len(prefix):]
+        if rest.startswith(f"{bucket}/"):
+            key = rest[len(bucket) + 1:]
+        else:
+            key = rest
+        new_url = f"{endpoint}/{bucket}/{key}"
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H9",
+            "location": "bot/services/storage.py:rewrite_storage_public_url",
+            "message": "rewrite public storage url",
+            "data": {
+                "reason": "public_path",
+                "from_base": base,
+                "to_base": endpoint
+            }
+        })
+        # endregion
+        return new_url
+    if base and url.startswith(f"{base}/"):
         new_url = f"{endpoint}{url[len(base):]}"
         # region agent log
         _debug_log({
@@ -64,6 +90,7 @@ def rewrite_storage_public_url(url: Optional[str]) -> Optional[str]:
             "location": "bot/services/storage.py:rewrite_storage_public_url",
             "message": "rewrite public storage url",
             "data": {
+                "reason": "base",
                 "from_base": base,
                 "to_base": endpoint
             }
