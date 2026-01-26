@@ -168,9 +168,28 @@ async def telegram_webhook(request: Request):
     try:
         # Получаем JSON от Telegram
         update_data = await request.json()
-        
-        # Создаем объект Update из данных
-        update = Update.model_validate(update_data)
+        update_id = update_data.get("update_id")
+        chat_id = None
+        update_type = None
+        if "message" in update_data:
+            update_type = "message"
+            chat_id = update_data.get("message", {}).get("chat", {}).get("id")
+        elif "callback_query" in update_data:
+            update_type = "callback_query"
+            chat_id = update_data.get("callback_query", {}).get("message", {}).get("chat", {}).get("id")
+        elif "my_chat_member" in update_data:
+            update_type = "my_chat_member"
+            chat_id = update_data.get("my_chat_member", {}).get("chat", {}).get("id")
+
+        logger.info(
+            "Telegram update received: id=%s type=%s chat_id=%s",
+            update_id,
+            update_type,
+            chat_id
+        )
+
+        # Создаем объект Update из данных с контекстом бота
+        update = Update.model_validate(update_data, context={"bot": _telegram_bot})
         
         # Передаем обновление в Dispatcher для обработки
         await dp.feed_update(_telegram_bot, update)
