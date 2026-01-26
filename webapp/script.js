@@ -2175,6 +2175,7 @@ function updateBroadcastRecipients() {
 const IMAGE_MAX_DIMENSION = 2560;
 const IMAGE_COMPRESS_THRESHOLD_MB = 3;
 const IMAGE_COMPRESS_QUALITY = 0.86;
+const IMAGE_UPLOAD_TARGET_BYTES = 900 * 1024;
 
 async function _loadImageFromFile(file) {
     return new Promise((resolve, reject) => {
@@ -2192,14 +2193,20 @@ async function _loadImageFromFile(file) {
     });
 }
 
-async function compressImageFile(file) {
+async function compressImageFile(file, options = {}) {
+    const {
+        force = false,
+        maxDimension = IMAGE_MAX_DIMENSION,
+        quality = IMAGE_COMPRESS_QUALITY,
+        thresholdMb = IMAGE_COMPRESS_THRESHOLD_MB
+    } = options;
     const isImage = file?.type && file.type.startsWith('image/');
     if (!isImage || file.type === 'image/gif' || file.type === 'image/svg+xml') {
         return { file, compressed: false };
     }
 
     const sizeMb = file.size / (1024 * 1024);
-    const shouldTryCompress = sizeMb >= IMAGE_COMPRESS_THRESHOLD_MB;
+    const shouldTryCompress = force || sizeMb >= thresholdMb;
     if (!shouldTryCompress) {
         return { file, compressed: false };
     }
@@ -2222,8 +2229,8 @@ async function compressImageFile(file) {
         return { file, compressed: false };
     }
 
-    const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(width, height));
-    if (scale === 1 && sizeMb < IMAGE_COMPRESS_THRESHOLD_MB * 1.2) {
+    const scale = Math.min(1, maxDimension / Math.max(width, height));
+    if (scale === 1 && !force && sizeMb < thresholdMb * 1.2) {
         if (source.close) source.close();
         return { file, compressed: false };
     }
@@ -2242,7 +2249,7 @@ async function compressImageFile(file) {
     if (source.close) source.close();
 
     const outputType = 'image/jpeg';
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, IMAGE_COMPRESS_QUALITY));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, outputType, quality));
     if (!blob) {
         return { file, compressed: false };
     }
@@ -2299,18 +2306,55 @@ async function handleImageUpload(file, prefix) {
         }
 
         const { file: preparedFile, compressed } = await compressImageFile(file);
-        const uploadFile = preparedFile || file;
+        let uploadFile = preparedFile || file;
         await logClientUpload('prepared', {
             compressed: !!compressed,
             name: uploadFile?.name || '',
             type: uploadFile?.type || '',
             size: uploadFile?.size || 0
         });
+        let recompressAttempts = 0;
+        let recompressed = false;
+        if (uploadFile.size > IMAGE_UPLOAD_TARGET_BYTES) {
+            let maxDimension = IMAGE_MAX_DIMENSION;
+            let quality = IMAGE_COMPRESS_QUALITY;
+            let nextFile = uploadFile;
+            while (recompressAttempts < 3 && nextFile.size > IMAGE_UPLOAD_TARGET_BYTES) {
+                recompressAttempts += 1;
+                maxDimension = Math.max(640, Math.round(maxDimension * 0.85));
+                quality = Math.max(0.6, Math.round((quality - 0.1) * 100) / 100);
+                const result = await compressImageFile(nextFile, {
+                    force: true,
+                    maxDimension,
+                    quality,
+                    thresholdMb: 0
+                });
+                if (!result?.file || result.file.size >= nextFile.size) {
+                    break;
+                }
+                nextFile = result.file;
+                recompressed = true;
+            }
+            uploadFile = nextFile;
+            await logClientUpload('recompress', {
+                attempts: recompressAttempts,
+                maxDimension,
+                quality,
+                size: uploadFile?.size || 0
+            });
+        }
+        await logClientUpload('final', {
+            size: uploadFile?.size || 0,
+            target: IMAGE_UPLOAD_TARGET_BYTES,
+            recompressed: recompressed
+        });
         if (compressed && statusEl) {
             statusEl.textContent = 'Сжатие завершено, загружаю...';
         }
-        if (uploadFile.size > maxSizeMb * 1024 * 1024) {
-            throw new Error(`Файл больше ${maxSizeMb} МБ`);
+        const sizeLimitBytes = Math.min(maxSizeMb * 1024 * 1024, IMAGE_UPLOAD_TARGET_BYTES);
+        if (uploadFile.size > sizeLimitBytes) {
+            const limitMb = Math.round((sizeLimitBytes / 1024 / 1024) * 10) / 10;
+            throw new Error(`Файл больше ${limitMb} МБ. Уменьшите изображение.`);
         }
 
         // Создаем FormData для отправки файла
