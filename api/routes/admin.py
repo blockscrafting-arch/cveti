@@ -136,6 +136,18 @@ async def upload_file(
 ):
     """Загружает файл в Supabase Storage"""
     try:
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H10",
+            "location": "api/routes/admin.py:upload_file.entry",
+            "message": "upload entry",
+            "data": {
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "folder": folder
+            }
+        })
+        # endregion
         # Читаем содержимое файла
         file_content = await file.read()
 
@@ -167,11 +179,37 @@ async def upload_file(
         is_image_type = bool(file.content_type and file.content_type.startswith("image/"))
         is_allowed_ext = ext in allowed_exts
         is_allowed_detected = detected_ext in allowed_exts if detected_ext else False
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H10",
+            "location": "api/routes/admin.py:upload_file.validation",
+            "message": "upload validation",
+            "data": {
+                "ext": ext,
+                "detected_ext": detected_ext,
+                "is_image_type": is_image_type,
+                "is_allowed_ext": is_allowed_ext,
+                "is_allowed_detected": is_allowed_detected,
+                "size": len(file_content)
+            }
+        })
+        # endregion
 
         if not is_image_type and not is_allowed_ext and not is_allowed_detected:
             detail = "Only image files are allowed"
             if file.content_type:
                 detail = f"Only image files are allowed (content_type: {file.content_type}, ext: {ext or 'none'})"
+            # region agent log
+            _debug_log({
+                "hypothesisId": "H10",
+                "location": "api/routes/admin.py:upload_file.reject",
+                "message": "upload rejected",
+                "data": {
+                    "reason": "type",
+                    "detail": detail
+                }
+            })
+            # endregion
             raise HTTPException(status_code=400, detail=detail)
 
         # Если расширение отсутствует/неподходящее, пытаемся подставить по сигнатуре
@@ -183,6 +221,18 @@ async def upload_file(
         max_size_mb = 50
         max_size = max_size_mb * 1024 * 1024
         if len(file_content) > max_size:
+            # region agent log
+            _debug_log({
+                "hypothesisId": "H10",
+                "location": "api/routes/admin.py:upload_file.reject",
+                "message": "upload rejected",
+                "data": {
+                    "reason": "size",
+                    "size": len(file_content),
+                    "max_size": max_size
+                }
+            })
+            # endregion
             raise HTTPException(status_code=400, detail=f"File size exceeds {max_size_mb}MB limit")
         
         # Загружаем в Supabase Storage
