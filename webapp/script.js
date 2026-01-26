@@ -1649,7 +1649,6 @@ function renderUserForm(user) {
     const fieldsEl = document.getElementById('form-fields');
     const safeName = escapeAttr(user.name || '');
     const safePhone = escapeAttr(user.phone || '');
-    const balance = safeNumber(user.balance, 0);
     const level = String(user.level || 'new');
     const transactionsHtml = currentUserTransactions.length ? currentUserTransactions.map(t => {
         const description = escapeHtml(t.description || 'Транзакция');
@@ -1679,7 +1678,10 @@ function renderUserForm(user) {
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Баланс баллов</label>
-            <input type="number" name="balance" value="${balance}" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm" required>
+            <div class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm text-stone-700">
+                ${safeNumber(user.balance, 0)}
+            </div>
+            <div class="text-[10px] text-stone-400 mt-2 px-1">Баланс меняется только через транзакции</div>
         </div>
         <div>
             <label class="block text-xs font-bold text-stone-400 uppercase mb-1 px-1">Уровень</label>
@@ -2596,8 +2598,6 @@ async function handleAdminSubmit(e) {
         formData.forEach((value, key) => {
             if (key === 'active') {
                 // Пропускаем, обработаем отдельно
-            } else if (key === 'balance') {
-                data[key] = parseInt(value) || 0;
             } else if (value) {
                 data[key] = value;
             }
