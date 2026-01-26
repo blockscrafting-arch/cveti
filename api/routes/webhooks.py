@@ -11,7 +11,10 @@ import logging
 import json
 import time
 
-DEBUG_LOG_PATH = r"d:\vladexecute\proj\CVETI\.cursor\debug.log"
+DEBUG_LOG_PATHS = [
+    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
+    "/app/.cursor/debug.log"
+]
 
 def _debug_log(payload: dict):
     try:
@@ -19,8 +22,13 @@ def _debug_log(payload: dict):
         payload.setdefault("runId", "run1")
         payload["timestamp"] = int(time.time() * 1000)
         line = json.dumps(payload, ensure_ascii=False)
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        for log_path in DEBUG_LOG_PATHS:
+            try:
+                with open(log_path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+                break
+            except Exception:
+                continue
     except Exception:
         pass
 
