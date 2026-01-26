@@ -13,7 +13,8 @@ import time
 
 DEBUG_LOG_PATHS = [
     r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
-    "/app/.cursor/debug.log"
+    "/app/debug.log",
+    "/tmp/debug.log"
 ]
 
 def _debug_log(payload: dict):
