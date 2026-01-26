@@ -132,6 +132,9 @@ app.include_router(settings_routes.router)
 
 @app.get("/")
 async def root():
+    index_path = os.path.join(webapp_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
     return {"message": "API is running", "version": "1.0.0"}
 
 @app.get("/health")
