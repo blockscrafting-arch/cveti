@@ -21,11 +21,12 @@ class SupabaseClient:
         self.key = settings.SUPABASE_KEY
         self.rest_path = settings.SUPABASE_REST_PATH.strip().strip('/')
         self.headers = {
-            "apikey": self.key,
-            "Authorization": f"Bearer {self.key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation"
         }
+        if self.key:
+            self.headers["apikey"] = self.key
+            self.headers["Authorization"] = f"Bearer {self.key}"
         self.client = httpx.AsyncClient(timeout=30.0)
 
     def _build_url(self, *parts: str) -> str:
