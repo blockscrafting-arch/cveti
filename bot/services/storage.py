@@ -175,7 +175,7 @@ class StorageService:
                 }
             })
             # endregion
-            print(f"[s3_upload] error type={type(e).__name__}")
+            print(f"[s3_upload] error type={type(e).__name__} message={str(e)}")
             logger.error(f"Error uploading file to Supabase Storage: {e}", exc_info=True)
             return None
     

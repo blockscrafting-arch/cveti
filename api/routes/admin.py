@@ -616,7 +616,7 @@ async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_curren
         })
         # endregion
         if "balance" in data:
-            print("[admin_update_user] balance_change_blocked")
+            print(f"[admin_update_user] balance_change_blocked value={data.get('balance')}")
         # Удаляем updated_at из данных, если он там есть - БД обновит автоматически через триггер или DEFAULT
         data.pop("updated_at", None)
         data.pop("balance", None)
