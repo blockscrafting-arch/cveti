@@ -37,6 +37,7 @@ async def cmd_start(message: types.Message):
     tg_id = message.from_user.id
     
     logger.info(f"Command /start from user {tg_id}")
+    logger.info("Start handler received text=%s contact=%s", message.text, bool(message.contact))
 
     # region agent log
     _debug_log({
@@ -129,5 +130,6 @@ async def cmd_start(message: types.Message):
             }
         })
         # endregion
+        logger.error("Start handler failed: %s", e, exc_info=True)
         logger.error(f"Error in cmd_start: {e}", exc_info=True)
         await message.answer("❌ Произошла ошибка. Попробуйте еще раз.")
