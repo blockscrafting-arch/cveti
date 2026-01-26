@@ -4,6 +4,7 @@
 import logging
 import json
 import time
+import os
 import hashlib
 from urllib.parse import quote
 from botocore.config import Config
@@ -15,12 +16,13 @@ from bot.services.supabase_client import supabase
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-DEBUG_LOG_PATHS = [
-    r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
-    "/app/.cursor/debug.log",
-    "/app/debug.log",
-    "/tmp/debug.log"
-]
+
+def _get_debug_paths() -> list[str]:
+    if os.name == "nt":
+        return [r"d:\vladexecute\proj\CVETI\.cursor\debug.log"]
+    return ["/tmp/debug.log", "/app/.cursor/debug.log", "/app/debug.log"]
+
+DEBUG_LOG_PATHS = _get_debug_paths()
 
 def _debug_log(payload: dict):
     try:
@@ -28,13 +30,17 @@ def _debug_log(payload: dict):
         payload.setdefault("runId", "run1")
         payload["timestamp"] = int(time.time() * 1000)
         line = json.dumps(payload, ensure_ascii=False)
+        wrote = False
         for log_path in DEBUG_LOG_PATHS:
             try:
                 with open(log_path, "a", encoding="utf-8") as f:
                     f.write(line + "\n")
+                wrote = True
                 break
             except Exception:
                 continue
+        if not wrote:
+            print(f"[debug_log] {line}")
     except Exception:
         pass
 class StorageService:
