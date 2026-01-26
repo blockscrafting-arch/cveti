@@ -315,6 +315,10 @@ async def create_master(data: Dict[str, Any], _: int = Depends(get_current_admin
 @router.put("/masters/{id}")
 async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        if "photo_url" in data:
+            data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
+        if "image_url" in data:
+            data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
         # region agent log
         _debug_log({
             "hypothesisId": "H8",
@@ -469,6 +473,10 @@ async def create_service(data: Dict[str, Any], _: int = Depends(get_current_admi
 @router.put("/services/{id}")
 async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        if "image_url" in data:
+            data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
+        if "photo_url" in data:
+            data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
         # region agent log
         _debug_log({
             "hypothesisId": "H8",
@@ -618,6 +626,10 @@ async def create_promotion(data: Dict[str, Any], _: int = Depends(get_current_ad
 @router.put("/promotions/{id}")
 async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
+        if "image_url" in data:
+            data["image_url"] = rewrite_storage_public_url(data.get("image_url"))
+        if "photo_url" in data:
+            data["photo_url"] = rewrite_storage_public_url(data.get("photo_url"))
         # region agent log
         _debug_log({
             "hypothesisId": "H8",
