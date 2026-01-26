@@ -217,7 +217,46 @@ class StorageService:
                             aws_secret_access_key=self.s3_secret_key,
                             config=attempt["config"]
                         ) as s3:
-                            def _log_s3_headers(request, **kwargs):
+                            def _log_s3_headers(event_name: str):
+                                def _handler(request, **kwargs):
+                                    try:
+                                        headers = request.headers or {}
+                                        # region agent log
+                                        _debug_log({
+                                            "hypothesisId": "H5",
+                                            "location": "bot/services/storage.py:upload_file.s3_headers",
+                                            "message": "s3 request headers",
+                                            "data": {
+                                                "attempt": attempt["label"],
+                                                "event": event_name,
+                                                "x_amz_content_sha256": headers.get("x-amz-content-sha256") or headers.get("X-Amz-Content-SHA256"),
+                                                "x_amz_decoded_content_length": headers.get("x-amz-decoded-content-length") or headers.get("X-Amz-Decoded-Content-Length"),
+                                                "content_length": headers.get("content-length") or headers.get("Content-Length"),
+                                                "transfer_encoding": headers.get("transfer-encoding") or headers.get("Transfer-Encoding"),
+                                                "content_encoding": headers.get("content-encoding") or headers.get("Content-Encoding"),
+                                                "content_md5": headers.get("content-md5") or headers.get("Content-MD5"),
+                                                "expect": headers.get("expect") or headers.get("Expect")
+                                            }
+                                        })
+                                        # endregion
+                                    except Exception:
+                                        pass
+                                return _handler
+
+                            s3.meta.events.register(
+                                "request-created.s3.PutObject",
+                                _log_s3_headers("request-created")
+                            )
+                            s3.meta.events.register(
+                                "before-sign.s3.PutObject",
+                                _log_s3_headers("before-sign")
+                            )
+                            s3.meta.events.register(
+                                "before-send.s3.PutObject",
+                                _log_s3_headers("before-send")
+                            )
+
+                            def _log_s3_headers_compat(request, **kwargs):
                                 try:
                                     headers = request.headers or {}
                                     # region agent log
@@ -227,18 +266,20 @@ class StorageService:
                                         "message": "s3 request headers",
                                         "data": {
                                             "attempt": attempt["label"],
+                                            "event": "compat-before-send",
                                             "x_amz_content_sha256": headers.get("x-amz-content-sha256") or headers.get("X-Amz-Content-SHA256"),
+                                            "x_amz_decoded_content_length": headers.get("x-amz-decoded-content-length") or headers.get("X-Amz-Decoded-Content-Length"),
                                             "content_length": headers.get("content-length") or headers.get("Content-Length"),
                                             "transfer_encoding": headers.get("transfer-encoding") or headers.get("Transfer-Encoding"),
                                             "content_encoding": headers.get("content-encoding") or headers.get("Content-Encoding"),
+                                            "content_md5": headers.get("content-md5") or headers.get("Content-MD5"),
                                             "expect": headers.get("expect") or headers.get("Expect")
                                         }
                                     })
                                     # endregion
                                 except Exception:
                                     pass
-
-                            s3.meta.events.register("before-send.s3.PutObject", _log_s3_headers)
+                            s3.meta.events.register("before-send.s3.PutObject", _log_s3_headers_compat)
                             await s3.put_object(
                                 Bucket=self.bucket,
                                 Key=file_path,
