@@ -52,9 +52,11 @@ async def cmd_start(message: types.Message):
     # endregion
     
     try:
+        print("[tg_start] db_lookup start")
         # Проверяем, есть ли пользователь в базе
         user_res = await supabase.table("users").select("*").eq("tg_id", tg_id).execute()
         logger.info(f"User {tg_id} found in DB: {len(user_res.data) > 0}")
+        print(f"[tg_start] db_lookup done found={bool(user_res.data)}")
 
         # region agent log
         _debug_log({
@@ -75,11 +77,13 @@ async def cmd_start(message: types.Message):
                 "пожалуйста, поделитесь вашим номером телефона.\n\n"
                 "📱 Нажмите кнопку ниже, чтобы поделиться номером:"
             )
+            print("[tg_start] sending registration prompt")
             await message.answer(
                 text,
                 reply_markup=get_registration_keyboard(),
                 parse_mode="Markdown"
             )
+            print("[tg_start] registration prompt sent")
 
             # region agent log
             _debug_log({
@@ -102,11 +106,13 @@ async def cmd_start(message: types.Message):
                 "Выберите действие из меню ниже:"
             )
             
+            print("[tg_start] sending main menu")
             await message.answer(
                 text,
                 reply_markup=await get_main_menu(is_admin=is_admin),
                 parse_mode="Markdown"
             )
+            print("[tg_start] main menu sent")
 
             # region agent log
             _debug_log({
@@ -119,6 +125,7 @@ async def cmd_start(message: types.Message):
             })
             # endregion
     except Exception as e:
+        print(f"[tg_start] error type={type(e).__name__}")
         # region agent log
         _debug_log({
             "hypothesisId": "H4",
