@@ -230,7 +230,7 @@ class StorageService:
                         detail = f"{detail} {error_code}"
                     raise Exception(detail)
 
-            async def _probe_public_url(label: str, url: str) -> None:
+            async def _probe_public_url(label: str, url: str) -> dict:
                 try:
                     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                         response = await client.head(url)
@@ -255,6 +255,11 @@ class StorageService:
                     }
                 })
                 # endregion
+                return {
+                    "status_code": status_code,
+                    "content_type": content_type,
+                    "error_type": error_type
+                }
 
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
                 session = aioboto3.Session()
@@ -530,17 +535,32 @@ class StorageService:
                     raise upload_error
 
             logger.info(f"File uploaded successfully: {file_path}")
+            return_url = public_url
             if uploaded:
                 try:
-                    await _probe_public_url("public_url", public_url)
+                    public_probe = await _probe_public_url("public_url", public_url)
                     if self.s3_endpoint:
                         endpoint = self.s3_endpoint.rstrip("/")
                         key_path = quote(file_path, safe="/")
                         s3_url = f"{endpoint}/{self.bucket}/{key_path}"
-                        await _probe_public_url("s3_endpoint", s3_url)
+                        s3_probe = await _probe_public_url("s3_endpoint", s3_url)
+                        if public_probe.get("status_code") in {401, 403, 404} and s3_probe.get("status_code") == 200:
+                            return_url = s3_url
+                            # region agent log
+                            _debug_log({
+                                "hypothesisId": "H7",
+                                "location": "bot/services/storage.py:upload_file.public_url_fallback",
+                                "message": "fallback to s3 endpoint url",
+                                "data": {
+                                    "public_status": public_probe.get("status_code"),
+                                    "s3_status": s3_probe.get("status_code"),
+                                    "return_url": return_url
+                                }
+                            })
+                            # endregion
                 except Exception:
                     pass
-            return public_url
+            return return_url
                 
         except Exception as e:
             # region agent log
