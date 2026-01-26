@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Supabase
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_REST_PATH: str = os.getenv("SUPABASE_REST_PATH", "rest/v1")
     
     # Supabase Storage (S3 API)
     SUPABASE_STORAGE_S3_ENDPOINT: str = os.getenv("SUPABASE_STORAGE_S3_ENDPOINT", "")
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_SECRET_KEY: str = os.getenv("SUPABASE_STORAGE_SECRET_KEY", "")
     SUPABASE_STORAGE_BUCKET: str = os.getenv("SUPABASE_STORAGE_BUCKET", "CVETi")
     SUPABASE_STORAGE_PUBLIC_URL_BASE: str = os.getenv("SUPABASE_STORAGE_PUBLIC_URL_BASE", "")
+    STORAGE_PUBLIC_URL_TEMPLATE: str = os.getenv("STORAGE_PUBLIC_URL_TEMPLATE", "")
     
     # YClients
     YCLIENTS_PARTNER_TOKEN: str = os.getenv("YCLIENTS_PARTNER_TOKEN", "")  # Токен партнера (разработчика)

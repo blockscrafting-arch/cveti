@@ -5,9 +5,20 @@ services:
     build: .
     container_name: cveti_app
     restart: always
+    depends_on:
+      - postgrest
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
       - ./.cursor:/app/.cursor # Для логов, если нужно
+
+  postgrest:
+    image: postgrest/postgrest:latest
+    container_name: cveti_postgrest
+    restart: always
+    environment:
+      PGRST_DB_URI: ${POSTGREST_DB_URI}
+      PGRST_DB_SCHEMA: ${POSTGREST_DB_SCHEMA:-public}
+      PGRST_DB_ANON_ROLE: ${POSTGREST_DB_ANON_ROLE}

@@ -16,6 +16,7 @@ class StorageService:
         self.public_url_base = (
             settings.SUPABASE_STORAGE_PUBLIC_URL_BASE.strip() or settings.SUPABASE_URL
         ).rstrip('/')
+        self.public_url_template = settings.STORAGE_PUBLIC_URL_TEMPLATE.strip()
         self.s3_endpoint = settings.SUPABASE_STORAGE_S3_ENDPOINT
         self.s3_region = settings.SUPABASE_STORAGE_S3_REGION
         self.s3_access_key = settings.SUPABASE_STORAGE_ACCESS_KEY
@@ -26,6 +27,8 @@ class StorageService:
     
     def _get_public_url(self, path: str) -> str:
         """Получить публичный URL для файла"""
+        if self.public_url_template:
+            return self.public_url_template.format(bucket=self.bucket, path=path)
         # Если задан публичный base URL, используем его
         if settings.SUPABASE_STORAGE_PUBLIC_URL_BASE:
             return f"{self.public_url_base}/storage/v1/object/public/{self.bucket}/{path}"

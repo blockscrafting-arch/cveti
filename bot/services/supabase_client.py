@@ -19,6 +19,7 @@ class SupabaseClient:
     def __init__(self):
         self.url = settings.SUPABASE_URL.rstrip('/')
         self.key = settings.SUPABASE_KEY
+        self.rest_path = settings.SUPABASE_REST_PATH.strip().strip('/')
         self.headers = {
             "apikey": self.key,
             "Authorization": f"Bearer {self.key}",
@@ -26,6 +27,14 @@ class SupabaseClient:
             "Prefer": "return=representation"
         }
         self.client = httpx.AsyncClient(timeout=30.0)
+
+    def _build_url(self, *parts: str) -> str:
+        """Собирает URL для REST и RPC, учитывая опциональный префикс."""
+        base = self.url
+        if self.rest_path:
+            base = f"{base}/{self.rest_path}"
+        extra = "/".join(part.strip("/") for part in parts if part)
+        return f"{base}/{extra}" if extra else base
     
     async def close(self):
         """Закрыть HTTP клиент"""
@@ -33,7 +42,7 @@ class SupabaseClient:
     
     async def _request(self, method: str, table: str, **kwargs) -> Any:
         """Базовый метод для HTTP запросов с обработкой ошибок"""
-        url = f"{self.url}/rest/v1/{table}"
+        url = self._build_url(table)
         try:
             response = await self.client.request(method, url, headers=self.headers, **kwargs)
             response.raise_for_status()
@@ -47,7 +56,7 @@ class SupabaseClient:
     
     async def rpc(self, function_name: str, params: Optional[Dict] = None) -> Any:
         """Выполнить RPC запрос (хранимую процедуру)"""
-        url = f"{self.url}/rest/v1/rpc/{function_name}"
+        url = self._build_url("rpc", function_name)
         try:
             response = await self.client.post(url, headers=self.headers, json=params or {})
             response.raise_for_status()
