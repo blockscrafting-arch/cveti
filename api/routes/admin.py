@@ -106,19 +106,48 @@ async def upload_file(
 ):
     """Загружает файл в Supabase Storage"""
     try:
-        # Проверяем тип файла
-        allowed_exts = {"jpg", "jpeg", "png", "gif", "webp", "heic", "heif"}
-        filename = file.filename or "image.jpg"
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-        is_image_type = bool(file.content_type and file.content_type.startswith("image/"))
-        if not is_image_type and ext not in allowed_exts:
-            detail = "Only image files are allowed"
-            if file.content_type:
-                detail = f"Only image files are allowed (content_type: {file.content_type})"
-            raise HTTPException(status_code=400, detail=detail)
-        
         # Читаем содержимое файла
         file_content = await file.read()
+
+        # Проверяем тип файла
+        allowed_exts = {"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif"}
+        filename = file.filename or "image"
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+        def _detect_image_ext(content: bytes) -> Optional[str]:
+            if not content or len(content) < 12:
+                return None
+            if content.startswith(b"\xFF\xD8\xFF"):
+                return "jpg"
+            if content.startswith(b"\x89PNG\r\n\x1a\n"):
+                return "png"
+            if content.startswith(b"GIF87a") or content.startswith(b"GIF89a"):
+                return "gif"
+            if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+                return "webp"
+            if content[4:8] == b"ftyp":
+                brand = content[8:12]
+                if brand in {b"heic", b"heif", b"hevc", b"hevx", b"mif1", b"msf1"}:
+                    return "heic"
+                if brand == b"avif":
+                    return "avif"
+            return None
+
+        detected_ext = _detect_image_ext(file_content)
+        is_image_type = bool(file.content_type and file.content_type.startswith("image/"))
+        is_allowed_ext = ext in allowed_exts
+        is_allowed_detected = detected_ext in allowed_exts if detected_ext else False
+
+        if not is_image_type and not is_allowed_ext and not is_allowed_detected:
+            detail = "Only image files are allowed"
+            if file.content_type:
+                detail = f"Only image files are allowed (content_type: {file.content_type}, ext: {ext or 'none'})"
+            raise HTTPException(status_code=400, detail=detail)
+
+        # Если расширение отсутствует/неподходящее, пытаемся подставить по сигнатуре
+        if (not is_allowed_ext) and is_allowed_detected:
+            base_name = filename.rsplit(".", 1)[0] if "." in filename else (filename or "image")
+            filename = f"{base_name}.{detected_ext}"
         
         # Проверяем размер файла (максимум 10MB)
         max_size = 10 * 1024 * 1024  # 10MB
