@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 DEBUG_LOG_PATHS = [
     r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
+    "/app/.cursor/debug.log",
     "/app/debug.log",
     "/tmp/debug.log"
 ]
@@ -618,6 +619,10 @@ async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_curren
         # endregion
         if "balance" in data:
             print(f"[admin_update_user] balance_change_blocked value={data.get('balance')}")
+            raise HTTPException(
+                status_code=400,
+                detail="Баланс нельзя менять напрямую. Используйте транзакции."
+            )
         # Удаляем updated_at из данных, если он там есть - БД обновит автоматически через триггер или DEFAULT
         data.pop("updated_at", None)
         data.pop("balance", None)
@@ -649,13 +654,14 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
     try:
         # region agent log
         _debug_log({
-            "hypothesisId": "H2",
-            "location": "api/routes/admin.py:create_transaction",
-            "message": "admin create transaction",
+            "hypothesisId": "H1",
+            "location": "api/routes/admin.py:create_transaction.entry",
+            "message": "admin create transaction entry",
             "data": {
                 "user_id": user_id,
                 "amount": data.get("amount"),
-                "has_description": bool(data.get("description"))
+                "has_description": bool(data.get("description")),
+                "code_marker": "admin_tx_no_fallback_v2"
             }
         })
         # endregion
@@ -695,20 +701,29 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             description=description
         )
         print(f"[admin_tx] yclients_result success={success} message={message}")
+        # region agent log
+        _debug_log({
+            "hypothesisId": "H1",
+            "location": "api/routes/admin.py:create_transaction.yclients_result",
+            "message": "yclients manual transaction result",
+            "data": {
+                "success": success,
+                "message": message,
+                "new_balance": new_balance,
+                "no_card_branch": (not success and message in {
+                    "Не найден клиент в YClients",
+                    "Карта лояльности не найдена",
+                    "Не удалось определить ID карты лояльности"
+                })
+            }
+        })
+        # endregion
         if not success:
             if message in {"Не найден клиент в YClients", "Карта лояльности не найдена", "Не удалось определить ID карты лояльности"}:
-                expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
-                rpc_res = await supabase.rpc("adjust_loyalty_balance", {
-                    "p_user_id": int(user_id),
-                    "p_amount": amount,
-                    "p_description": description,
-                    "p_expiration_days": int(expiration_days)
-                }).execute()
-                new_balance = 0
-                if rpc_res.data and isinstance(rpc_res.data, dict):
-                    new_balance = int(rpc_res.data.get("new_balance") or 0)
-                print("[admin_tx] fallback_local applied")
-                return {"success": True, "new_balance": new_balance}
+                raise HTTPException(
+                    status_code=400,
+                    detail="У клиента нет карты лояльности в YClients. Ручные транзакции недоступны."
+                )
             raise HTTPException(status_code=400, detail=message)
 
         return {"success": True, "new_balance": new_balance}

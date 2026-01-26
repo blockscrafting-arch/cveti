@@ -13,6 +13,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 DEBUG_LOG_PATHS = [
     r"d:\vladexecute\proj\CVETI\.cursor\debug.log",
+    "/app/.cursor/debug.log",
     "/app/debug.log",
     "/tmp/debug.log"
 ]
@@ -90,7 +91,7 @@ class StorageService:
         """
         try:
             file_path = self._generate_file_path(filename, folder)
-            
+            public_url = self._get_public_url(file_path)
             content_type = self._get_content_type(filename)
             # Предпочитаем S3 API (aioboto3), если настроены креды
             if self.s3_endpoint and self.s3_access_key and self.s3_secret_key:
@@ -116,7 +117,10 @@ class StorageService:
                     region_name=self.s3_region,
                     aws_access_key_id=self.s3_access_key,
                     aws_secret_access_key=self.s3_secret_key,
-                    config=Config(signature_version="s3v4", s3={"addressing_style": "path"})
+                    config=Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path", "payload_signing_enabled": False}
+                    )
                 ) as s3:
                     await s3.put_object(
                         Bucket=self.bucket,
@@ -132,7 +136,8 @@ class StorageService:
                     "message": "s3 put_object ok",
                     "data": {
                         "bucket": self.bucket,
-                        "key": file_path
+                        "key": file_path,
+                        "public_url": public_url
                     }
                 })
                 # endregion
@@ -163,7 +168,6 @@ class StorageService:
                         logger.error(f"Bucket '{self.bucket}' not found. Please run the SQL creation script.")
                     raise upload_error
 
-            public_url = self._get_public_url(file_path)
             logger.info(f"File uploaded successfully: {file_path}")
             return public_url
                 
