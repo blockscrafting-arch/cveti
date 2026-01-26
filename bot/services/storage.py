@@ -4,6 +4,7 @@
 import logging
 import json
 import time
+from botocore.config import Config
 import aioboto3
 from bot.config import settings
 from bot.services.supabase_client import supabase
@@ -114,13 +115,15 @@ class StorageService:
                     endpoint_url=self.s3_endpoint,
                     region_name=self.s3_region,
                     aws_access_key_id=self.s3_access_key,
-                    aws_secret_access_key=self.s3_secret_key
+                    aws_secret_access_key=self.s3_secret_key,
+                    config=Config(signature_version="s3v4", s3={"addressing_style": "path"})
                 ) as s3:
                     await s3.put_object(
                         Bucket=self.bucket,
                         Key=file_path,
                         Body=file_content,
-                        ContentType=content_type
+                        ContentType=content_type,
+                        ContentLength=len(file_content) if file_content else 0
                     )
                 # region agent log
                 _debug_log({

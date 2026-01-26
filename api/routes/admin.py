@@ -4,6 +4,7 @@ from bot.services.supabase_client import supabase
 from bot.services.notifications import send_broadcast_message
 from bot.services.storage import get_storage_service
 from bot.services.loyalty import apply_yclients_manual_transaction, get_user_available_balance, sync_user_with_yclients
+from bot.services.settings import get_setting
 from bot.config import settings
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
@@ -695,6 +696,19 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
         )
         print(f"[admin_tx] yclients_result success={success} message={message}")
         if not success:
+            if message in {"Не найден клиент в YClients", "Карта лояльности не найдена", "Не удалось определить ID карты лояльности"}:
+                expiration_days = await get_setting('loyalty_expiration_days', settings.LOYALTY_EXPIRATION_DAYS)
+                rpc_res = await supabase.rpc("adjust_loyalty_balance", {
+                    "p_user_id": int(user_id),
+                    "p_amount": amount,
+                    "p_description": description,
+                    "p_expiration_days": int(expiration_days)
+                }).execute()
+                new_balance = 0
+                if rpc_res.data and isinstance(rpc_res.data, dict):
+                    new_balance = int(rpc_res.data.get("new_balance") or 0)
+                print("[admin_tx] fallback_local applied")
+                return {"success": True, "new_balance": new_balance}
             raise HTTPException(status_code=400, detail=message)
 
         return {"success": True, "new_balance": new_balance}
