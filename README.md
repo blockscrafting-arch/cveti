@@ -46,6 +46,10 @@ docker compose up -d --build
 - Telegram: `https://your-domain.ru/webhook/telegram`
 - YCLIENTS: `https://your-domain.ru/webhook/yclients`
 
+## 📚 Документация
+
+- Развертывание на Beget (VPS + PostgreSQL DBaaS + S3): `docs/beget-runbook.md`
+
 ## 🔒 Безопасность и ФЗ-152
 
 Проект поддерживает развертывание на собственном сервере (Self-hosted Supabase) для обеспечения хранения персональных данных на территории РФ.
