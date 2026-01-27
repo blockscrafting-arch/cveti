@@ -23,9 +23,17 @@
 ### Бот и домен
 
 - `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET` (опционально)
 - `BASE_URL` (домен проекта, например `https://cveti-cosmetology.ru`)
 - `WEBHOOK_SECRET` (секрет для вебхука YClients)
 - `ADMIN_IDS` (ID админов через запятую)
+
+### CORS
+
+По умолчанию разрешены `BASE_URL`, `https://t.me`, `https://web.telegram.org`.
+Если нужно иначе, задайте:
+- `CORS_ALLOW_ORIGINS` — список origin через запятую
+- `CORS_ALLOW_ORIGIN_REGEX` — regex для origin (опционально)
 
 ### PostgREST (DBaaS)
 

@@ -113,10 +113,15 @@ async def yclients_webhook(
     secret_token_query: str | None = Query(default=None, alias="secret_token")
 ):
     """Принимает вебхук и запускает обработку в фоне"""
+    if not settings.WEBHOOK_SECRET:
+        logger.error("WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
     # Проверка безопасности
     if secret_token != settings.WEBHOOK_SECRET and secret_token_query != settings.WEBHOOK_SECRET:
         logger.warning("Unauthorized webhook attempt")
         raise HTTPException(status_code=403, detail="Invalid secret token")
+    if secret_token_query and secret_token != settings.WEBHOOK_SECRET:
+        logger.warning("Webhook secret provided via query parameter")
     
     # Базовая валидация структуры
     if not payload.data:
@@ -136,9 +141,14 @@ async def yclients_callback(
     secret_token_query: str | None = Query(default=None, alias="secret_token")
 ):
     """Обрабатывает уведомления об отключении интеграции от YCLIENTS"""
+    if not settings.WEBHOOK_SECRET:
+        logger.error("WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
     if secret_token != settings.WEBHOOK_SECRET and secret_token_query != settings.WEBHOOK_SECRET:
         logger.warning("Unauthorized webhook callback attempt")
         raise HTTPException(status_code=403, detail="Invalid secret token")
+    if secret_token_query and secret_token != settings.WEBHOOK_SECRET:
+        logger.warning("Webhook secret provided via query parameter")
 
     logger.info(f"YClients callback received: {payload}")
     

@@ -38,11 +38,13 @@ class Settings(BaseSettings):
     YCLIENTS_BOOKING_URL: str = os.getenv("YCLIENTS_BOOKING_URL", "https://n12345.yclients.com/")  # Ссылка на онлайн-запись
     
     # Security
-    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "change_me_to_random_string") # Секрет для защиты вебхука
+    WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "") # Секрет для защиты вебхука
     ADMIN_IDS: Union[str, list[int]] = Field(default_factory=list)
     
     # App
     BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")
+    CORS_ALLOW_ORIGINS: list[str] = Field(default_factory=list)
+    CORS_ALLOW_ORIGIN_REGEX: str = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "")
     
     # Loyalty
     LOYALTY_PERCENTAGE: float = float(os.getenv("LOYALTY_PERCENTAGE", "0.05"))  # 5% кэшбек по умолчанию
@@ -62,6 +64,20 @@ class Settings(BaseSettings):
                 return []
             # Парсим строку вида "123,456,789" или просто "123"
             return [int(i.strip()) for i in v.split(",") if i.strip()]
+        return []
+
+    @field_validator('CORS_ALLOW_ORIGINS', mode='before')
+    @classmethod
+    def parse_cors_origins(cls, v: Union[str, list, None]) -> list[str]:
+        """Парсит CORS_ALLOW_ORIGINS из строки или списка"""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(i).strip() for i in v if str(i).strip()]
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [item.strip() for item in v.split(",") if item.strip()]
         return []
     
     def __init__(self, **kwargs):

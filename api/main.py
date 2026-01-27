@@ -14,25 +14,71 @@ from bot.tasks.sync import run_periodic_sync
 import os
 import logging
 import asyncio
+from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 
 
 app = FastAPI(title="Cosmetology Loyalty API")
 
-# Настройка CORS для доступа с телефона через ngrok
-# ВАЖНО: allow_credentials=True несовместим с allow_origins=["*"]
-# Для ngrok и Telegram Web App используем allow_origins=["*"] без credentials
+def _normalize_origin(url: str) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url.strip())
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return url.strip().rstrip("/")
+
+def _build_cors_origins() -> list[str]:
+    origins = list(settings.CORS_ALLOW_ORIGINS or [])
+    if not origins and not settings.CORS_ALLOW_ORIGIN_REGEX:
+        base_origin = _normalize_origin(settings.BASE_URL)
+        if base_origin:
+            origins.append(base_origin)
+        # Telegram WebApp origins
+        origins.extend(["https://t.me", "https://web.telegram.org"])
+    # Убираем дубликаты, сохраняя порядок
+    return list(dict.fromkeys([origin for origin in origins if origin]))
+
+cors_origins = _build_cors_origins()
+cors_origin_regex = settings.CORS_ALLOW_ORIGIN_REGEX.strip() or None
+
+# Настройка CORS для доступа WebApp
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Разрешаем все источники (для ngrok и Telegram)
-    allow_credentials=False,  # Должно быть False при allow_origins=["*"]
-    allow_methods=["*"],  # Разрешаем все методы
-    allow_headers=["*"],  # Разрешаем все заголовки
-    expose_headers=["*"],  # Разрешаем доступ ко всем заголовкам ответа
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Middleware для логирования запросов
+SENSITIVE_HEADERS = {
+    "authorization",
+    "apikey",
+    "x-api-key",
+    "x-webhook-secret",
+    "x-telegram-bot-api-secret-token",
+    "x-tg-init-data",
+    "cookie",
+    "set-cookie",
+}
+
+def _redact_headers(headers: dict) -> dict:
+    redacted = {}
+    for key, value in headers.items():
+        lower = key.lower()
+        if lower in SENSITIVE_HEADERS:
+            redacted[key] = "***"
+        else:
+            if isinstance(value, str) and len(value) > 200:
+                redacted[key] = f"{value[:200]}..."
+            else:
+                redacted[key] = value
+    return redacted
+
 @app.middleware("http")
 async def log_requests(request, call_next):
     # Логируем детальную информацию о запросе
@@ -46,14 +92,9 @@ async def log_requests(request, call_next):
     logger.info(f"  Origin: {origin}")
     logger.info(f"  User-Agent: {user_agent[:100] if len(user_agent) > 100 else user_agent}")
     logger.info(f"  Referer: {referer}")
-    logger.info(f"  Headers: {dict(request.headers)}")
+    logger.info(f"  Headers: {_redact_headers(dict(request.headers))}")
     
     response = await call_next(request)
-    
-    # Добавляем CORS заголовки вручную для отладки
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
     
     logger.info(f"Response: {response.status_code} for {request.url.path}")
     return response
