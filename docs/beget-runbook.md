@@ -109,6 +109,9 @@ sudo certbot --nginx -d cveti-cosmetology.ru -d www.cveti-cosmetology.ru
 
 URL: `https://<домен>/webhook/telegram`
 
+Если хотите защиту — задайте `TELEGRAM_WEBHOOK_SECRET` и установите webhook с
+секретом. Сервер проверяет заголовок `X-Telegram-Bot-Api-Secret-Token`.
+
 ```bash
 curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=https://<домен>/webhook/telegram&drop_pending_updates=true"
 curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
@@ -118,6 +121,9 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
 
 URL: `https://<домен>/webhook/yclients`
 Header: `X-Webhook-Secret: <WEBHOOK_SECRET>`
+
+Если в YClients невозможно поставить заголовок, поддерживается query‑параметр:
+`https://<домен>/webhook/yclients?secret_token=<WEBHOOK_SECRET>`
 
 ## 6. Типовые проблемы и решения
 

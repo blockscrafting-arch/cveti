@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Header
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Header, Query
 from api.models.yclients import YClientsWebhookData
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import process_loyalty_payment
@@ -109,11 +109,12 @@ async def handle_payment_webhook(payload: YClientsWebhookData):
 async def yclients_webhook(
     payload: YClientsWebhookData, 
     background_tasks: BackgroundTasks,
-    secret_token: str = Header(None, alias="X-Webhook-Secret")
+    secret_token: str = Header(None, alias="X-Webhook-Secret"),
+    secret_token_query: str | None = Query(default=None, alias="secret_token")
 ):
     """Принимает вебхук и запускает обработку в фоне"""
     # Проверка безопасности
-    if secret_token != settings.WEBHOOK_SECRET:
+    if secret_token != settings.WEBHOOK_SECRET and secret_token_query != settings.WEBHOOK_SECRET:
         logger.warning("Unauthorized webhook attempt")
         raise HTTPException(status_code=403, detail="Invalid secret token")
     
@@ -131,10 +132,11 @@ async def yclients_webhook(
 async def yclients_callback(
     payload: dict,
     background_tasks: BackgroundTasks,
-    secret_token: str = Header(None, alias="X-Webhook-Secret")
+    secret_token: str = Header(None, alias="X-Webhook-Secret"),
+    secret_token_query: str | None = Query(default=None, alias="secret_token")
 ):
     """Обрабатывает уведомления об отключении интеграции от YCLIENTS"""
-    if secret_token != settings.WEBHOOK_SECRET:
+    if secret_token != settings.WEBHOOK_SECRET and secret_token_query != settings.WEBHOOK_SECRET:
         logger.warning("Unauthorized webhook callback attempt")
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
@@ -156,7 +158,10 @@ async def yclients_callback(
     return {"status": "ok"}
 
 @router.post("/telegram")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(
+    request: Request,
+    telegram_secret: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")
+):
     """
     Вебхук от Telegram для получения обновлений бота.
     Telegram будет отправлять сюда все сообщения и события.
@@ -164,6 +169,10 @@ async def telegram_webhook(request: Request):
     if _telegram_bot is None:
         logger.error("Telegram bot is not initialized")
         raise HTTPException(status_code=500, detail="Bot not ready")
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        if telegram_secret != settings.TELEGRAM_WEBHOOK_SECRET:
+            logger.warning("Invalid Telegram webhook secret")
+            raise HTTPException(status_code=403, detail="Invalid secret token")
     
     try:
         # Получаем JSON от Telegram

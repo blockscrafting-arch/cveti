@@ -14,6 +14,7 @@ load_dotenv('.env')
 class Settings(BaseSettings):
     # Telegram
     BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_WEBHOOK_SECRET: str = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
     
     # Supabase
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
