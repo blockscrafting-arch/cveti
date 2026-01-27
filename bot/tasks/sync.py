@@ -2,6 +2,7 @@ import asyncio
 import logging
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import sync_user_with_yclients
+from bot.services.visits import sync_user_visits
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ async def run_periodic_sync():
                         # Синхронизируем каждого пользователя
                         # Добавляем небольшую задержку между запросами, чтобы не спамить API
                         await sync_user_with_yclients(user_id)
+                        await sync_user_visits(user_id, limit=50, force=True)
                         await asyncio.sleep(0.5) 
                     except Exception as e:
                         logger.error(f"Failed to sync user {user_id} during periodic task: {e}")

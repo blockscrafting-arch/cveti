@@ -94,3 +94,35 @@ python -m scripts.migrate_images --dry-run --table services
 2024-01-15 10:00:10 - INFO -   Failed: 0
 2024-01-15 10:00:10 - INFO -   Skipped: 0
 ```
+
+## diagnose_user.py
+
+Скрипт для диагностики пользователя: проверка записей в `users`, истории транзакций,
+логов вебхуков и сверка с YClients.
+
+### Использование
+
+```bash
+python -m scripts.diagnose_user --phone +79991234567
+python -m scripts.diagnose_user --tg-id 123456789
+python -m scripts.diagnose_user --user-id 42
+```
+
+### Полезные опции
+
+```bash
+python -m scripts.diagnose_user --phone +79991234567 --limit 50
+python -m scripts.diagnose_user --phone +79991234567 --skip-yclients
+```
+
+## backfill_visits.py
+
+Единоразовый синк визитов из YClients в локальную таблицу `yclients_visits`.
+
+### Использование
+
+```bash
+python -m scripts.backfill_visits
+python -m scripts.backfill_visits --only-user-id 42
+python -m scripts.backfill_visits --limit-per-user 100
+```

@@ -5,6 +5,7 @@ from bot.services.loyalty import get_user_available_balance, sync_user_with_ycli
 from bot.services.settings import get_setting
 from bot.services.storage import rewrite_storage_public_url
 from bot.services.yclients_api import yclients
+from bot.services.visits import get_user_visits, sync_user_visits
 from bot.config import settings
 from typing import Optional
 import logging
@@ -74,23 +75,32 @@ async def get_app_profile(x_tg_init_data: Optional[str] = Header(None)):
             # Возвращаем профиль без истории, если транзакции не загрузились
             tx_res = type('obj', (object,), {'data': []})()
 
-        # 4. Получаем историю визитов из YClients
+        # 4. Получаем историю визитов (локальный кэш -> синк -> fallback в YClients)
         visits = []
         try:
-            yclients_id = user.get("yclients_id")
-            if not yclients_id and user.get("phone"):
-                client = await yclients.get_client_by_phone(user["phone"])
-                if client and client.get("id"):
-                    yclients_id = client["id"]
-                    try:
-                        await supabase.table("users").update({"yclients_id": yclients_id}).eq("id", user["id"]).execute()
-                    except Exception as update_err:
-                        logger.warning(f"Could not update yclients_id for user {user['id']}: {update_err}")
-
-            if yclients_id:
-                visits = await yclients.get_client_visits(yclients_id, limit=10)
+            visits = await get_user_visits(user["id"], limit=10)
+            sync_result = await sync_user_visits(
+                user["id"],
+                limit=10,
+                force=not visits,
+                min_interval_minutes=30
+            )
+            if sync_result.get("visits"):
+                visits = sync_result["visits"]
+            elif not visits:
+                yclients_id = user.get("yclients_id")
+                if not yclients_id and user.get("phone"):
+                    client = await yclients.get_client_by_phone(user["phone"])
+                    if client and client.get("id"):
+                        yclients_id = client["id"]
+                        try:
+                            await supabase.table("users").update({"yclients_id": yclients_id}).eq("id", user["id"]).execute()
+                        except Exception as update_err:
+                            logger.warning(f"Could not update yclients_id for user {user['id']}: {update_err}")
+                if yclients_id:
+                    visits = await yclients.get_client_visits(yclients_id, limit=10)
         except Exception as e:
-            logger.warning(f"Could not fetch visits from YClients: {e}")
+            logger.warning(f"Could not fetch visits: {e}")
         
         return {
             "user": user,
