@@ -96,4 +96,4 @@ async def update_setting_by_key(
         }
     except Exception as e:
         logger.error(f"Error updating setting: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Временная ошибка. Попробуйте позже.")

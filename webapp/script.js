@@ -97,6 +97,20 @@ function normalizePercentValue(value) {
     return num <= 1 ? num * 100 : num;
 }
 
+/** Возвращает понятное пользователю сообщение об ошибке (без технических деталей). */
+function friendlyErrorMessage(err, fallback) {
+    const msg = (err && err.message) ? String(err.message) : '';
+    const fallbackText = fallback || 'Что-то пошло не так. Попробуйте позже.';
+    if (!msg) return fallbackText;
+    if (/^API Error 401/i.test(msg)) return 'Нужно войти снова. Откройте приложение из Telegram.';
+    if (/^API Error 403/i.test(msg)) return 'Недостаточно прав.';
+    if (/^API Error 404/i.test(msg)) return 'Не найдено.';
+    if (/^API Error 5\d\d/i.test(msg)) return 'Временная ошибка. Попробуйте позже.';
+    if (/Reorder error|Save error|Delete error|Upload failed/i.test(msg)) return fallbackText;
+    if (msg.length > 80 || msg.includes('detail') || msg.includes('Database')) return fallbackText;
+    return msg;
+}
+
 // Инициализируем Telegram WebApp
 if (tg && tg.expand) {
     tg.expand();
@@ -347,7 +361,17 @@ async function apiFetch(endpoint) {
         
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`API Error ${response.status}: ${errorText}`);
+            let detail = '';
+            try {
+                const parsed = JSON.parse(errorText);
+                detail = (parsed && parsed.detail) ? String(parsed.detail) : errorText.slice(0, 100);
+            } catch (_) {
+                detail = errorText.slice(0, 100);
+            }
+            const friendly = response.status === 401 ? 'Нужно войти снова.' :
+                response.status === 403 ? 'Недостаточно прав.' :
+                response.status >= 500 ? 'Временная ошибка. Попробуйте позже.' : detail;
+            throw new Error(friendly);
         }
         
         const data = await response.json();
@@ -875,7 +899,7 @@ async function loadAdminData() {
         if (listEl) {
             listEl.innerHTML = `<div class="text-center py-10 text-rose-500">
                 <div class="font-semibold mb-2">Ошибка загрузки</div>
-                <div class="text-xs text-stone-400">${escapeHtml(error.message || 'Неизвестная ошибка')}</div>
+                <div class="text-xs text-stone-400">${escapeHtml(friendlyErrorMessage(error, 'Не удалось загрузить данные.'))}</div>
             </div>`;
         }
     }
@@ -1793,7 +1817,7 @@ async function handleTransactionSubmit(e, userId) {
         }, 350);
     } catch (error) {
         console.error("Transaction error:", error);
-        alert(error.message || "Ошибка при создании транзакции");
+        alert(friendlyErrorMessage(error, "Ошибка при создании транзакции"));
     }
 }
 
@@ -2683,7 +2707,7 @@ async function handleAdminSubmit(e) {
             return;
         } catch (error) {
             console.error("Save error:", error);
-            alert(error.message || "Ошибка при сохранении");
+            alert(friendlyErrorMessage(error, "Ошибка при сохранении"));
             return;
         }
     }
@@ -2998,7 +3022,7 @@ async function deleteBroadcast(id) {
         loadAdminData();
     } catch (error) {
         console.error("Delete broadcast error:", error);
-        alert(`Ошибка при удалении рассылки: ${error.message}`);
+        alert(`Ошибка при удалении рассылки: ${friendlyErrorMessage(error, 'Не удалось удалить.')}`);
     }
 }
 

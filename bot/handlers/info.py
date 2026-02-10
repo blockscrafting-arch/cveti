@@ -184,7 +184,7 @@ def _format_percent(value: float) -> int:
 async def show_custom_button_response(message: types.Message):
     """Fallback для пользовательских кнопок из БД."""
     button_text = message.text or ""
-    print(f"[tg_text_fallback] len={len(button_text)} starts_with_slash={button_text.startswith('/')}")
+    logger.debug("tg_text_fallback len=%s starts_with_slash=%s", len(button_text), button_text.startswith("/"))
     if button_text.startswith("/"):
         return
     if not button_text:

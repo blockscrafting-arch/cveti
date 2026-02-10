@@ -32,7 +32,7 @@ async def get_app_profile(x_tg_init_data: Optional[str] = Header(None)):
             user_res = await supabase.table("users").select("*").eq("tg_id", tg_id).execute()
         except Exception as e:
             logger.error(f"Database error in get_app_profile: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail="Database error")
+            raise HTTPException(status_code=500, detail="Не удалось загрузить профиль. Попробуйте позже.")
         
         if not user_res.data:
             logger.info(f"User not found: tg_id={tg_id}")

@@ -101,19 +101,28 @@ class StorageService:
         except:
             return f"{self.public_url_base}/storage/v1/object/public/{self.bucket}/{path}"
     
+    ALLOWED_UPLOAD_FOLDERS = ("images", "promotions", "masters", "services")
+
     def _generate_file_path(self, filename: str, folder: str = "images") -> str:
-        """Генерирует уникальный путь для файла"""
+        """Генерирует уникальный путь для файла. folder санитизирован (whitelist, без path traversal)."""
         import uuid
         from datetime import datetime
-        
-        ext = filename.split('.')[-1] if '.' in filename else 'jpg'
+        import re
+
+        # Санитизация folder: только разрешённые имена, без .. и спецсимволов
+        folder_clean = (folder or "images").strip().strip("/").lower()
+        if not folder_clean or folder_clean not in self.ALLOWED_UPLOAD_FOLDERS:
+            folder_clean = "images"
+        if ".." in folder_clean or re.search(r"[^\w\-]", folder_clean):
+            folder_clean = "images"
+
+        ext = (filename.split(".")[-1] if "." in filename else "jpg").lower()
+        if not re.match(r"^[a-z0-9]+$", ext):
+            ext = "jpg"
         unique_id = str(uuid.uuid4())[:8]
         timestamp = int(datetime.now().timestamp())
-        
-        # Очищаем folder от лишних слешей
-        folder = folder.strip('/')
-        
-        return f"{folder}/{timestamp}_{unique_id}.{ext}"
+
+        return f"{folder_clean}/{timestamp}_{unique_id}.{ext}"
 
     async def upload_file(self, file_content: bytes, filename: str, folder: str = "images") -> Optional[str]:
         """
@@ -324,13 +333,11 @@ class StorageService:
                         }
                     })
                     # endregion
-                    print(
-                        "[s3_upload] "
-                        f"attempt={attempt['label']} "
-                        f"payload_signing={attempt['payload_signing_enabled']} "
-                        f"endpoint={self.s3_endpoint} region={self.s3_region} "
-                        f"bucket={self.bucket} bytes={len(file_content) if file_content else 0} "
-                        f"type={content_type}"
+                    logger.debug(
+                        "s3_upload attempt=%s bucket=%s bytes=%s",
+                        attempt["label"],
+                        self.bucket,
+                        len(file_content) if file_content else 0,
                     )
                     try:
                         async with session.client(
@@ -424,7 +431,7 @@ class StorageService:
                             }
                         })
                         # endregion
-                        print(f"[s3_upload] ok attempt={attempt['label']} bucket={self.bucket} key={file_path}")
+                        logger.debug("s3_upload ok attempt=%s bucket=%s key=%s", attempt["label"], self.bucket, file_path)
                         uploaded = True
                         break
                     except ClientError as err:
@@ -446,11 +453,11 @@ class StorageService:
                             }
                         })
                         # endregion
-                        print(
-                            "[s3_upload] "
-                            f"error attempt={attempt['label']} "
-                            f"code={error_code} type={type(err).__name__} "
-                            f"message={str(err)}"
+                        logger.debug(
+                            "s3_upload error attempt=%s code=%s type=%s",
+                            attempt["label"],
+                            error_code,
+                            type(err).__name__,
                         )
                         if error_code != "XAmzContentSHA256Mismatch":
                             raise
@@ -596,8 +603,8 @@ class StorageService:
                 }
             })
             # endregion
-            print(f"[s3_upload] error type={type(e).__name__} message={str(e)}")
-            logger.error(f"Error uploading file to Supabase Storage: {e}", exc_info=True)
+            logger.debug("s3_upload error type=%s", type(e).__name__)
+            logger.error("Error uploading file to Supabase Storage: %s", e, exc_info=True)
             return None
     
     def _get_content_type(self, filename: str) -> str:

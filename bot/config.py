@@ -4,7 +4,7 @@ import bot.patches  # noqa: F401
 import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from pydantic import field_validator, Field
+from pydantic import field_validator, Field, ConfigDict
 from typing import Union
 
 # Загружаем .env.local в первую очередь, затем .env
@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     # YClients
     YCLIENTS_PARTNER_TOKEN: str = os.getenv("YCLIENTS_PARTNER_TOKEN", "")  # Токен партнера (разработчика)
     YCLIENTS_USER_TOKEN: str = os.getenv("YCLIENTS_USER_TOKEN", "")  # User Token системного пользователя (создается при подключении интеграции)
-    YCLIENTS_COMPANY_ID: str = os.getenv("YCLIENTS_COMPANY_ID", "443477")  # ID филиала/компании (НЕ партнера! Находится в URL: /company/443477 или в настройках приложения)
-    YCLIENTS_BOOKING_URL: str = os.getenv("YCLIENTS_BOOKING_URL", "https://n12345.yclients.com/")  # Ссылка на онлайн-запись
+    YCLIENTS_COMPANY_ID: str = os.getenv("YCLIENTS_COMPANY_ID", "")  # ID филиала/компании (НЕ партнера! Находится в URL: /company/443477 или в настройках приложения)
+    YCLIENTS_BOOKING_URL: str = os.getenv("YCLIENTS_BOOKING_URL", "")  # Ссылка на онлайн-запись (например https://n12345.yclients.com/)
     
     # Security
     WEBHOOK_SECRET: str = os.getenv("WEBHOOK_SECRET", "") # Секрет для защиты вебхука
@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     
     # App
     BASE_URL: str = os.getenv("BASE_URL", "http://localhost:8000")
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")  # Мониторинг ошибок (пусто = отключено)
     CORS_ALLOW_ORIGINS: list[str] = Field(default_factory=list)
     CORS_ALLOW_ORIGIN_REGEX: str = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "")
     
@@ -87,9 +88,8 @@ class Settings(BaseSettings):
             if admin_ids_str:
                 kwargs['ADMIN_IDS'] = admin_ids_str
         super().__init__(**kwargs)
-    
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+
+    model_config = ConfigDict(env_file=".env", extra="ignore")
+
 
 settings = Settings()

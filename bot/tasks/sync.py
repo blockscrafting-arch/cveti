@@ -6,43 +6,44 @@ from bot.services.visits import sync_user_visits
 
 logger = logging.getLogger(__name__)
 
+# Ограничение батча за один проход (масштабируемость: не грузим 10k пользователей)
+SYNC_BATCH_SIZE = 100
+# Задержка между пользователями (снижает нагрузку на YClients API)
+SYNC_DELAY_SECONDS = 1.0
+
+
 async def run_periodic_sync():
     """
-    Фоновая задача для периодической синхронизации всех пользователей с YClients.
-    Запускается раз в 24 часа.
+    Фоновая задача для периодической синхронизации пользователей с YClients.
+    За один проход обрабатывается батч (SYNC_BATCH_SIZE). Запуск раз в 24 часа.
     """
-    logger.info("Starting periodic YClients sync task")
-    
+    logger.info("Starting periodic YClients sync task (batch_size=%s)", SYNC_BATCH_SIZE)
+
     while True:
         try:
-            # 1. Получаем всех пользователей, у которых есть yclients_id или телефон
-            # Ограничиваем выборку активными пользователями
-            users_res = await supabase.table("users")\
-                .select("id")\
-                .eq("active", True)\
+            users_res = (
+                await supabase.table("users")
+                .select("id")
+                .eq("active", True)
+                .limit(SYNC_BATCH_SIZE)
                 .execute()
-            
+            )
+
             if users_res.data:
-                logger.info(f"Syncing {len(users_res.data)} users with YClients")
-                
+                logger.info("Syncing batch of %s users with YClients", len(users_res.data))
                 for user in users_res.data:
                     user_id = user["id"]
                     try:
-                        # Синхронизируем каждого пользователя
-                        # Добавляем небольшую задержку между запросами, чтобы не спамить API
                         await sync_user_with_yclients(user_id)
                         await sync_user_visits(user_id, limit=50, force=True)
-                        await asyncio.sleep(0.5) 
                     except Exception as e:
-                        logger.error(f"Failed to sync user {user_id} during periodic task: {e}")
-                
-                logger.info("Periodic sync completed")
+                        logger.error("Failed to sync user %s during periodic task: %s", user_id, e)
+                    await asyncio.sleep(SYNC_DELAY_SECONDS)
+                logger.info("Periodic sync batch completed")
             else:
                 logger.info("No active users found for sync")
 
         except Exception as e:
-            logger.error(f"Error in periodic sync task: {e}", exc_info=True)
-        
-        # Ждем 24 часа перед следующим запуском
-        # 24 * 60 * 60 = 86400 секунд
-        await asyncio.sleep(86400)
+            logger.error("Error in periodic sync task: %s", e, exc_info=True)
+
+        await asyncio.sleep(86400)  # 24 часа

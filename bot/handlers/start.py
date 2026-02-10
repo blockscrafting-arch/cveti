@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 async def cmd_start(message: types.Message):
     tg_id = message.from_user.id
     
-    print(f"[tg_start] entry user={tg_id} text={message.text} contact={bool(message.contact)}")
+    logger.debug("tg_start entry user=%s contact=%s", tg_id, bool(message.contact))
 
     try:
-        print("[tg_start] db_lookup start")
+        logger.debug("tg_start db_lookup start")
         # Проверяем, есть ли пользователь в базе
         user_res = await supabase.table("users").select("*").eq("tg_id", tg_id).execute()
-        logger.info(f"User {tg_id} found in DB: {len(user_res.data) > 0}")
-        print(f"[tg_start] db_lookup done found={bool(user_res.data)}")
+        logger.info("User %s found in DB: %s", tg_id, len(user_res.data) > 0)
+        logger.debug("tg_start db_lookup done found=%s", bool(user_res.data))
 
         if not user_res.data:
             # Если нет - просим телефон
@@ -29,13 +29,13 @@ async def cmd_start(message: types.Message):
                 "пожалуйста, поделитесь вашим номером телефона.\n\n"
                 "📱 Нажмите кнопку ниже, чтобы поделиться номером:"
             )
-            print("[tg_start] sending registration prompt")
+            logger.debug("tg_start sending registration prompt")
             await message.answer(
                 text,
                 reply_markup=get_registration_keyboard(),
                 parse_mode="Markdown"
             )
-            print("[tg_start] registration prompt sent")
+            logger.debug("tg_start registration prompt sent")
 
         else:
             # Если есть - показываем главное меню
@@ -48,16 +48,15 @@ async def cmd_start(message: types.Message):
                 "Выберите действие из меню ниже:"
             )
             
-            print("[tg_start] sending main menu")
+            logger.debug("tg_start sending main menu")
             await message.answer(
                 text,
                 reply_markup=await get_main_menu(is_admin=is_admin),
                 parse_mode="Markdown"
             )
-            print("[tg_start] main menu sent")
+            logger.debug("tg_start main menu sent")
 
     except Exception as e:
-        print(f"[tg_start] error type={type(e).__name__}")
+        logger.debug("tg_start error type=%s", type(e).__name__)
         logger.error("Start handler failed: %s", e, exc_info=True)
-        logger.error(f"Error in cmd_start: {e}", exc_info=True)
         await message.answer("❌ Произошла ошибка. Попробуйте еще раз.")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Header, HTTPException, Depends, Query, BackgroundTasks, UploadFile, File, Form, Request
 from bot.services.auth import validate_init_data, get_user_id_from_init_data
 from bot.services.supabase_client import supabase
 from bot.services.notifications import send_broadcast_message
@@ -6,15 +6,32 @@ from bot.services.storage import get_storage_service, rewrite_storage_public_url
 from bot.services.loyalty import apply_yclients_manual_transaction, get_user_available_balance, sync_user_with_yclients
 from bot.services.settings import get_setting
 from bot.config import settings
+from api.limiter import limiter
 from typing import Optional, List, Dict, Any
 from aiogram import Bot
 import logging
 import json
 import re
 from datetime import datetime
+import asyncio
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+
+# Ограничение параллельных рассылок (не более 2 одновременно)
+_broadcast_semaphore = asyncio.Semaphore(2)
+
+
+async def _run_broadcast_with_semaphore(broadcast_id: str) -> None:
+    """Запуск рассылки с ограничением параллелизма."""
+    async with _broadcast_semaphore:
+        await process_broadcast(broadcast_id)
+
+
+# Сообщение для клиента при внутренних ошибках (без утечки деталей)
+ADMIN_ERROR_MESSAGE = "Временная ошибка. Попробуйте позже."
+
+
 def _coerce_order(value):
     try:
         return int(value)
@@ -99,16 +116,30 @@ async def get_current_admin(x_tg_init_data: Optional[str] = Header(None)):
 # --- File Upload ---
 
 @router.post("/upload")
+@limiter.limit("30/minute")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     folder: str = Form(default="images"),
     x_tg_init_data: Optional[str] = Header(None),
-    _: int = Depends(get_current_admin)
+    _: int = Depends(get_current_admin),
 ):
     """Загружает файл в Supabase Storage"""
+    allowed_folders = {"images", "promotions", "masters", "services"}
+    folder_normalized = (folder or "images").strip().lower()
+    if folder_normalized not in allowed_folders or ".." in folder or "/" in folder:
+        folder_normalized = "images"
+
     try:
-        # Читаем содержимое файла
+        # Лимит 10MB — снижен с 50MB для экономии памяти и трафика
+        max_size_mb = 10
+        max_size = max_size_mb * 1024 * 1024
         file_content = await file.read()
+        if len(file_content) > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Файл слишком большой. Максимум {max_size_mb} МБ.",
+            )
 
         # Проверяем тип файла
         allowed_exts = {"jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif"}
@@ -139,43 +170,43 @@ async def upload_file(
         is_allowed_ext = ext in allowed_exts
         is_allowed_detected = detected_ext in allowed_exts if detected_ext else False
         if not is_image_type and not is_allowed_ext and not is_allowed_detected:
-            detail = "Only image files are allowed"
-            if file.content_type:
-                detail = f"Only image files are allowed (content_type: {file.content_type}, ext: {ext or 'none'})"
-            raise HTTPException(status_code=400, detail=detail)
+            raise HTTPException(
+                status_code=400,
+                detail="Разрешены только изображения (JPG, PNG, GIF, WebP и т.д.).",
+            )
 
         # Если расширение отсутствует/неподходящее, пытаемся подставить по сигнатуре
         if (not is_allowed_ext) and is_allowed_detected:
             base_name = filename.rsplit(".", 1)[0] if "." in filename else (filename or "image")
             filename = f"{base_name}.{detected_ext}"
         
-        # Проверяем размер файла (максимум 50MB)
-        max_size_mb = 50
-        max_size = max_size_mb * 1024 * 1024
-        if len(file_content) > max_size:
-            raise HTTPException(status_code=400, detail=f"File size exceeds {max_size_mb}MB limit")
-        
-        # Загружаем в Supabase Storage
+        # Загружаем в Supabase Storage (folder уже провалидирован выше)
         storage_service = get_storage_service()
         public_url = await storage_service.upload_file(
             file_content=file_content,
             filename=filename,
-            folder=folder
+            folder=folder_normalized,
         )
-        
+
         if not public_url:
-            raise HTTPException(status_code=500, detail="Failed to upload file")
+            raise HTTPException(
+                status_code=500,
+                detail="Не удалось загрузить файл. Попробуйте позже.",
+            )
 
         return {
             "url": public_url,
             "filename": file.filename,
-            "size": len(file_content)
+            "size": len(file_content),
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in upload_file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
+        logger.error("Error in upload_file: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось загрузить файл. Попробуйте позже.",
+        )
 
 # --- Masters ---
 
@@ -201,7 +232,7 @@ async def get_masters(_: int = Depends(get_current_admin)):
             return data
         except Exception as e2:
             logger.error(f"Error in get_masters: {e2}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
+            raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/masters")
 async def create_master(data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -216,7 +247,7 @@ async def create_master(data: Dict[str, Any], _: int = Depends(get_current_admin
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in create_master: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.put("/masters/{id}")
 async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -229,7 +260,7 @@ async def update_master(id: str, data: Dict[str, Any], _: int = Depends(get_curr
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in update_master: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.delete("/masters/{id}")
 async def delete_master(id: str, _: int = Depends(get_current_admin)):
@@ -238,7 +269,7 @@ async def delete_master(id: str, _: int = Depends(get_current_admin)):
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error in delete_master: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/masters/{id}/move")
 async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
@@ -323,7 +354,7 @@ async def move_master(id: str, direction: str = Query(..., pattern="^(up|down)$"
         raise
     except Exception as e:
         logger.error(f"Error in move_master: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Services ---
 
@@ -348,7 +379,7 @@ async def get_services(_: int = Depends(get_current_admin)):
             return data
         except Exception as e2:
             logger.error(f"Error in get_services: {e2}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
+            raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/services")
 async def create_service(data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -363,7 +394,7 @@ async def create_service(data: Dict[str, Any], _: int = Depends(get_current_admi
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in create_service: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.put("/services/{id}")
 async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -376,7 +407,7 @@ async def update_service(id: str, data: Dict[str, Any], _: int = Depends(get_cur
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in update_service: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.delete("/services/{id}")
 async def delete_service(id: str, _: int = Depends(get_current_admin)):
@@ -385,7 +416,7 @@ async def delete_service(id: str, _: int = Depends(get_current_admin)):
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error in delete_service: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/services/{id}/move")
 async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
@@ -464,7 +495,7 @@ async def move_service(id: str, direction: str = Query(..., pattern="^(up|down)$
         raise
     except Exception as e:
         logger.error(f"Error in move_service: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Promotions ---
 
@@ -490,7 +521,7 @@ async def get_promotions(_: int = Depends(get_current_admin)):
             return data
         except Exception as e2:
             logger.error(f"Error in get_promotions: {e2}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e2)}")
+            raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/promotions")
 async def create_promotion(data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -505,7 +536,7 @@ async def create_promotion(data: Dict[str, Any], _: int = Depends(get_current_ad
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in create_promotion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.put("/promotions/{id}")
 async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -518,7 +549,7 @@ async def update_promotion(id: str, data: Dict[str, Any], _: int = Depends(get_c
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in update_promotion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.delete("/promotions/{id}")
 async def delete_promotion(id: str, _: int = Depends(get_current_admin)):
@@ -527,7 +558,7 @@ async def delete_promotion(id: str, _: int = Depends(get_current_admin)):
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error in delete_promotion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/promotions/{id}/move")
 async def move_promotion(id: str, direction: str = Query(..., pattern="^(up|down)$"), _: int = Depends(get_current_admin)):
@@ -593,7 +624,7 @@ async def move_promotion(id: str, direction: str = Query(..., pattern="^(up|down
         raise
     except Exception as e:
         logger.error(f"Error in move_promotion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Users ---
 
@@ -604,7 +635,7 @@ async def get_users(_: int = Depends(get_current_admin)):
         return res.data if res.data else []
     except Exception as e:
         logger.error(f"Error in get_users: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.get("/users/{id}")
 async def get_user(id: str, _: int = Depends(get_current_admin)):
@@ -613,13 +644,13 @@ async def get_user(id: str, _: int = Depends(get_current_admin)):
         return res.data if res.data else {}
     except Exception as e:
         logger.error(f"Error in get_user: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.put("/users/{id}")
 async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     try:
         if "balance" in data:
-            print(f"[admin_update_user] balance_change_blocked value={data.get('balance')}")
+            logger.debug("admin_update_user balance_change_blocked")
             raise HTTPException(
                 status_code=400,
                 detail="Баланс нельзя менять напрямую. Используйте транзакции."
@@ -631,7 +662,7 @@ async def update_user(id: str, data: Dict[str, Any], _: int = Depends(get_curren
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in update_user: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Transactions ---
 
@@ -647,13 +678,13 @@ async def get_user_transactions(user_id: str, _: int = Depends(get_current_admin
         return res.data if res.data else []
     except Exception as e:
         logger.error(f"Error in get_user_transactions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/users/{user_id}/transactions")
 async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depends(get_current_admin)):
     """Создает транзакцию и обновляет баланс пользователя"""
     try:
-        print(f"[admin_tx] raw_amount={data.get('amount')} user_id={user_id}")
+        logger.debug("admin_tx user_id=%s", user_id)
         # Проверяем пользователя
         user_res = await supabase.table("users").select("id").eq("id", user_id).single().execute()
         if not user_res.data:
@@ -662,13 +693,13 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
         try:
             amount = int(data.get("amount", 0))
         except (TypeError, ValueError):
-            print("[admin_tx] invalid_amount")
+            logger.debug("admin_tx invalid_amount")
             raise HTTPException(status_code=400, detail="Invalid amount")
         
         if amount == 0:
-            print("[admin_tx] zero_amount")
+            logger.debug("admin_tx zero_amount")
             raise HTTPException(status_code=400, detail="Amount cannot be zero")
-        print(f"[admin_tx] amount_parsed={amount}")
+        logger.debug("admin_tx amount_parsed")
         
         description = data.get("description", "Ручное изменение баланса")
         
@@ -677,7 +708,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             await sync_user_with_yclients(int(user_id))
             available_balance = await get_user_available_balance(int(user_id))
             if abs(amount) > available_balance:
-                print(f"[admin_tx] insufficient_balance available={available_balance} amount={amount}")
+                logger.debug("admin_tx insufficient_balance")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Недостаточно баллов. Доступно: {available_balance}"
@@ -688,7 +719,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
             amount=amount,
             description=description
         )
-        print(f"[admin_tx] yclients_result success={success} message={message}")
+        logger.debug("admin_tx yclients_result success=%s", success)
         if not success:
             if message in {"Не найден клиент в YClients", "Карта лояльности не найдена", "Не удалось определить ID карты лояльности"}:
                 raise HTTPException(
@@ -702,7 +733,7 @@ async def create_transaction(user_id: str, data: Dict[str, Any], _: int = Depend
         raise
     except Exception as e:
         logger.error(f"Error in create_transaction: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Broadcasts ---
 
@@ -732,9 +763,7 @@ async def check_scheduled_broadcasts():
                     "scheduled_at": None  # Убираем запланированную дату
                 })
                 
-                # Запускаем отправку (в фоне через asyncio.create_task)
-                import asyncio
-                asyncio.create_task(process_broadcast(broadcast_id))
+                asyncio.create_task(_run_broadcast_with_semaphore(str(broadcast_id)))
     except Exception as e:
         logger.error(f"Error checking scheduled broadcasts: {e}", exc_info=True)
 
@@ -920,7 +949,7 @@ async def create_broadcast(data: Dict[str, Any], background_tasks: BackgroundTas
             raise last_error
     except Exception as e:
         logger.error(f"Error in create_broadcast: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.get("/broadcasts")
 async def get_broadcasts(_: int = Depends(get_current_admin)):
@@ -936,7 +965,7 @@ async def get_broadcasts(_: int = Depends(get_current_admin)):
         return items
     except Exception as e:
         logger.error(f"Error in get_broadcasts: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.get("/broadcasts/{id}")
 async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
@@ -949,10 +978,16 @@ async def get_broadcast(id: str, _: int = Depends(get_current_admin)):
         return data
     except Exception as e:
         logger.error(f"Error in get_broadcast: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/broadcasts/{id}/send")
-async def send_broadcast(id: str, background_tasks: BackgroundTasks, _: int = Depends(get_current_admin)):
+@limiter.limit("10/minute")
+async def send_broadcast(
+    request: Request,
+    id: str,
+    background_tasks: BackgroundTasks,
+    _: int = Depends(get_current_admin),
+):
     """Запускает отправку рассылки"""
     try:
         # Проверяем, что рассылка существует
@@ -973,15 +1008,14 @@ async def send_broadcast(id: str, background_tasks: BackgroundTasks, _: int = De
             "scheduled_at": None  # Убираем запланированную дату при ручной отправке
         })
         
-        # Запускаем отправку в фоне
-        background_tasks.add_task(process_broadcast, id)
+        background_tasks.add_task(_run_broadcast_with_semaphore, str(id))
         
         return {"status": "ok", "message": "Broadcast sending started"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in send_broadcast: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.delete("/broadcasts/{id}")
 async def delete_broadcast(id: str, _: int = Depends(get_current_admin)):
@@ -1008,7 +1042,7 @@ async def delete_broadcast(id: str, _: int = Depends(get_current_admin)):
         raise
     except Exception as e:
         logger.error(f"Error in delete_broadcast: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 # --- Bot Buttons ---
 
@@ -1020,7 +1054,7 @@ async def get_bot_buttons(_: int = Depends(get_current_admin)):
         return res.data if res.data else []
     except Exception as e:
         logger.error(f"Error in get_bot_buttons: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/bot-buttons")
 async def create_bot_button(data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -1030,7 +1064,7 @@ async def create_bot_button(data: Dict[str, Any], _: int = Depends(get_current_a
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in create_bot_button: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.put("/bot-buttons/{id}")
 async def update_bot_button(id: int, data: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -1040,7 +1074,7 @@ async def update_bot_button(id: int, data: Dict[str, Any], _: int = Depends(get_
         return res.data[0] if res.data else {}
     except Exception as e:
         logger.error(f"Error in update_bot_button: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.post("/bot-buttons/reorder")
 async def reorder_bot_buttons(payload: Dict[str, Any], _: int = Depends(get_current_admin)):
@@ -1090,7 +1124,7 @@ async def reorder_bot_buttons(payload: Dict[str, Any], _: int = Depends(get_curr
         raise
     except Exception as e:
         logger.error(f"Error in reorder_bot_buttons: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)
 
 @router.delete("/bot-buttons/{id}")
 async def delete_bot_button(id: int, _: int = Depends(get_current_admin)):
@@ -1100,4 +1134,4 @@ async def delete_bot_button(id: int, _: int = Depends(get_current_admin)):
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error in delete_bot_button: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=ADMIN_ERROR_MESSAGE)

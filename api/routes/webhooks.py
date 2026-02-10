@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Header, Query
+from api.limiter import limiter
 from api.models.yclients import YClientsWebhookData
 from bot.services.supabase_client import supabase
 from bot.services.loyalty import process_loyalty_payment
@@ -106,11 +107,13 @@ async def handle_payment_webhook(payload: YClientsWebhookData):
             logger.error(f"Error logging webhook error: {log_error}")
 
 @router.post("/yclients")
+@limiter.limit("60/minute")
 async def yclients_webhook(
-    payload: YClientsWebhookData, 
+    request: Request,
+    payload: YClientsWebhookData,
     background_tasks: BackgroundTasks,
     secret_token: str = Header(None, alias="X-Webhook-Secret"),
-    secret_token_query: str | None = Query(default=None, alias="secret_token")
+    secret_token_query: str | None = Query(default=None, alias="secret_token"),
 ):
     """Принимает вебхук и запускает обработку в фоне"""
     if not settings.WEBHOOK_SECRET:
@@ -134,11 +137,13 @@ async def yclients_webhook(
     return {"status": "accepted"}
 
 @router.post("/yclients/callback")
+@limiter.limit("30/minute")
 async def yclients_callback(
+    request: Request,
     payload: dict,
     background_tasks: BackgroundTasks,
     secret_token: str = Header(None, alias="X-Webhook-Secret"),
-    secret_token_query: str | None = Query(default=None, alias="secret_token")
+    secret_token_query: str | None = Query(default=None, alias="secret_token"),
 ):
     """Обрабатывает уведомления об отключении интеграции от YCLIENTS"""
     if not settings.WEBHOOK_SECRET:
@@ -168,9 +173,10 @@ async def yclients_callback(
     return {"status": "ok"}
 
 @router.post("/telegram")
+@limiter.limit("120/minute")
 async def telegram_webhook(
     request: Request,
-    telegram_secret: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token")
+    telegram_secret: str | None = Header(None, alias="X-Telegram-Bot-Api-Secret-Token"),
 ):
     """
     Вебхук от Telegram для получения обновлений бота.
@@ -200,15 +206,15 @@ async def telegram_webhook(
             update_type = "my_chat_member"
             chat_id = update_data.get("my_chat_member", {}).get("chat", {}).get("id")
 
-        print(f"[tg_webhook] entry id={update_id} type={update_type} chat_id={chat_id} text={update_data.get('message', {}).get('text')}")
+        logger.debug("tg_webhook entry id=%s type=%s chat_id=%s", update_id, update_type, chat_id)
 
         # Создаем объект Update из данных с контекстом бота
         update = Update.model_validate(update_data, context={"bot": _telegram_bot})
         
         # Передаем обновление в Dispatcher для обработки
-        print(f"[tg_webhook] dispatching id={update_id} type={update_type}")
+        logger.debug("tg_webhook dispatching id=%s type=%s", update_id, update_type)
         await dp.feed_update(_telegram_bot, update)
-        print(f"[tg_webhook] dispatched id={update_id} type={update_type}")
+        logger.debug("tg_webhook dispatched id=%s type=%s", update_id, update_type)
 
         logger.debug(f"Telegram webhook processed: update_id={update.update_id}")
         return {"ok": True}
